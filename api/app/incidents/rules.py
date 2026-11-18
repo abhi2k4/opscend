@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utcnow
 from app.models import Deployment, HealthCheck, Incident, Service
+from app.notifications import service as notifications
 
 DEPLOY_FAILED = "deploy_failed"
 HEALTH_FAILED = "health_check_failed"
@@ -50,6 +51,7 @@ async def _open(
             session.add(incident)
     except IntegrityError:  # another worker opened it first
         return None
+    notifications.incident_opened(session, incident)
     return incident
 
 
@@ -95,6 +97,7 @@ async def on_deployment(session: AsyncSession, deployment: Deployment) -> Incide
             failed.id != deployment.id and failed.started_at <= deployment.started_at
         ):
             resolve(incident)
+            notifications.incident_resolved(session, incident)
             await session.flush()
     return None
 
@@ -107,6 +110,7 @@ async def on_health_check(
         incident = await open_incident_for(session, service.id)
         if incident is not None and incident.trigger == HEALTH_FAILED:
             resolve(incident)
+            notifications.incident_resolved(session, incident)
             await session.flush()
         return None
 

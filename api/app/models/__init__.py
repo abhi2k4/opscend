@@ -4,7 +4,7 @@ from app.models.account import Integration, User
 from app.models.base import Base, new_id
 from app.models.catalog import Commit, CommitDiff, Deployment, LogLine, Service
 from app.models.investigation import Investigation, InvestigationStep
-from app.models.ops import HealthCheck, Incident, RawEvent
+from app.models.ops import HealthCheck, Incident, Notification, RawEvent
 
 __all__ = [
     "Base",
@@ -17,6 +17,7 @@ __all__ = [
     "Investigation",
     "InvestigationStep",
     "LogLine",
+    "Notification",
     "RawEvent",
     "Service",
     "User",

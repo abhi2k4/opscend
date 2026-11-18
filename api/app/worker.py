@@ -8,7 +8,7 @@ from arq.connections import RedisSettings
 from app.core.config import get_settings
 from app.core.db import get_engine
 from app.core.logging import configure_logging
-from app.jobs import JOBS, health_checks, reconcile
+from app.jobs import JOBS, deliver_notifications, health_checks, reconcile
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -24,6 +24,7 @@ class WorkerSettings:
     cron_jobs: ClassVar = [
         cron(reconcile, second={0}, run_at_startup=True),  # every 60s: poll for missed webhooks
         cron(health_checks, second={30}),  # every 60s, offset from the poller
+        cron(deliver_notifications, second={5, 20, 35, 50}),  # email outbox, every 15s
     ]
     on_startup = startup
     on_shutdown = shutdown

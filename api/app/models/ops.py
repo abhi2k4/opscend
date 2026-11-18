@@ -49,6 +49,30 @@ class HealthCheck(Base):
     checked_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
 
 
+class Notification(Base):
+    """Something the operator should know about, shown in the console bell.
+
+    The row is also the email outbox: `email_status` starts as "pending" when the
+    event is one that gets emailed, and the delivery job moves it to "sent" or
+    "failed". Writing the row in the caller's transaction and sending afterwards
+    means a rolled-back event never emails, and a crash never loses one.
+    """
+
+    __tablename__ = "notification"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(40), index=True)
+    severity: Mapped[str] = mapped_column(String(16), default="info")
+    title: Mapped[str] = mapped_column(String(512))
+    body: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
+    read_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    email_status: Mapped[str] = mapped_column(String(16), default="skipped", index=True)
+    email_error: Mapped[str | None] = mapped_column(Text)
+    email_attempts: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Incident(Base):
     """An open or resolved problem on one service.
 

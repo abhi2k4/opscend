@@ -348,6 +348,50 @@ class DemoScenario(Schema):
     description: str
 
 
+# ───────────────────────────── notifications
+
+NotificationKind = Literal[
+    "incident_opened",
+    "incident_resolved",
+    "investigation_completed",
+    "investigation_failed",
+    "integration_error",
+]
+
+
+class Notification(Schema):
+    id: str
+    kind: NotificationKind
+    severity: Literal["info", "success", "warning", "critical"]
+    title: str
+    body: str | None
+    link: str | None
+    created_at: datetime
+    read_at: datetime | None
+    email_status: Literal["pending", "sent", "skipped", "failed"]
+    email_error: str | None
+
+
+class NotificationList(Schema):
+    unread: int
+    items: list[Notification]
+
+
+class EmailSettings(Schema):
+    configured: bool
+    host: str | None
+    port: int
+    security: str
+    from_address: str | None
+    to_address: str | None
+    events: list[NotificationKind]
+
+
+class NotificationSettings(Schema):
+    kinds: list[NotificationKind]
+    email: EmailSettings
+
+
 class DemoBreakRequest(BaseModel):
     scenario_id: str
 
