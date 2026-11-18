@@ -15,6 +15,7 @@ from app.integrations.base import (
     DeploymentRef,
     ProviderAdapter,
     ProviderError,
+    ResourceUnavailableError,
     ServiceRef,
     WebhookVerificationError,
 )
@@ -202,6 +203,19 @@ async def test_railway_validate_and_graphql_errors():
 
 
 @respx.mock
+async def test_railway_workspace_token_validates_through_projects():
+    """Workspace tokens cannot query `me`; listing projects proves the token works."""
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        if "me {" in json.loads(request.content)["query"]:
+            return httpx.Response(200, json={"errors": [{"message": "Not Authorized"}]})
+        return httpx.Response(200, json=load_fixture("railway_projects.json"))
+
+    respx.post(RAILWAY_API).mock(side_effect=reply)
+    assert (await RailwayAdapter(TOKEN).validate()).account_name.startswith("workspace")
+
+
+@respx.mock
 async def test_railway_services_carry_project_and_environments():
     respx.post(RAILWAY_API).respond(json=load_fixture("railway_projects.json"))
     api, worker = await RailwayAdapter(TOKEN).list_services()
@@ -327,6 +341,14 @@ async def test_github_errors_are_translated():
         await GitHubAdapter(TOKEN).validate()
 
 
+@respx.mock
+@pytest.mark.parametrize("status", [403, 404, 409])
+async def test_github_unreadable_repo_is_a_skippable_error(status):
+    respx.get("https://api.github.com/repos/acme/private/commits").respond(status, json={})
+    with pytest.raises(ResourceUnavailableError, match="not readable"):
+        await GitHubAdapter(TOKEN).list_commits("acme/private", SINCE)
+
+
 def test_github_push_webhook_signature_and_normalization():
     body = raw("github_push.json")
     signature = "sha256=" + hmac.new(SECRET.encode(), body, hashlib.sha256).hexdigest()
@@ -351,3 +373,12 @@ def test_github_push_webhook_signature_and_normalization():
     for bad in ("", "sha256=" + "0" * 64, signature.removeprefix("sha256=")):
         with pytest.raises(WebhookVerificationError):
             adapter.parse_webhook({**headers, "X-Hub-Signature-256": bad}, body)
+
+
+@respx.mock
+async def test_github_follows_the_redirect_of_a_renamed_repo():
+    respx.get("https://api.github.com/repos/acme/old/commits").respond(
+        301, headers={"location": "https://api.github.com/repositories/42/commits"}, json={}
+    )
+    respx.get("https://api.github.com/repositories/42/commits").respond(json=[])
+    assert await GitHubAdapter(TOKEN).list_commits("acme/old", SINCE) == []
