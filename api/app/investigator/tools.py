@@ -19,10 +19,10 @@ from app.models import Deployment, HealthCheck, LogLine, Service
 from app.services import diffs, logs
 from app.services.presenters import find_commit
 
-MAX_LOG_LINES = 80
-MAX_LINE_CHARS = 400
-MAX_PATCH_CHARS = 2500
-MAX_OUTPUT_CHARS = 9000
+MAX_LOG_LINES = 60
+MAX_LINE_CHARS = 300
+MAX_PATCH_CHARS = 1800
+MAX_OUTPUT_CHARS = 6000
 RECENT_WINDOW = timedelta(hours=2)
 UNTRUSTED_CLOSE = "</untrusted_data>"
 

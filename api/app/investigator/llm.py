@@ -10,8 +10,10 @@ import httpx
 from app.core.config import get_settings
 
 REQUEST_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
-MAX_RATE_LIMIT_WAIT = 30.0
-MAX_COMPLETION_TOKENS = 1500
+# Per-minute limits clear within a minute; anything longer is a daily cap, so fail fast.
+MAX_RATE_LIMIT_WAIT = 65.0
+# Counts against the provider's tokens-per-minute limit on every request, so keep it tight.
+MAX_COMPLETION_TOKENS = 1000
 
 
 class LLMError(Exception):
@@ -57,7 +59,7 @@ class OpenAICompatibleClient:
         model: str,
         *,
         client: httpx.AsyncClient | None = None,
-        rate_limit_retries: int = 2,
+        rate_limit_retries: int = 4,
     ) -> None:
         self.model = model
         self._url = f"{base_url.rstrip('/')}/chat/completions"
