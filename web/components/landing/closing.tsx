@@ -1,67 +1,76 @@
 "use client";
 
-import { ArrowRight, ArrowUpRight, Plus } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { motion, useInView } from "motion/react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ButtonLink, CopyButton, Spotlight, Tag } from "@/components/ui/primitives";
+import { CopyButton } from "@/components/ui/primitives";
 import { ProviderIcon, providerName, Wordmark } from "@/components/ui/provider";
-import { API_DOCS_URL, REPO_URL } from "@/lib/site";
-import { Reveal, SectionHeading } from "./reveal";
+import { API_DOCS_URL, REPO_URL, VERSION } from "@/lib/site";
+import { Lines, Rise, Rule, Section } from "./reveal";
 
 // ───────────────────────────── integrations
 
 const PROVIDERS = [
-  { id: "vercel", state: "available", caps: ["deploys", "build logs", "webhooks"] },
-  { id: "railway", state: "available", caps: ["deploys", "build logs", "runtime logs"] },
-  { id: "github", state: "available", caps: ["commits", "diffs", "webhooks"] },
-  { id: "render", state: "planned", caps: [] },
-  { id: "fly", state: "planned", caps: [] },
-  { id: "netlify", state: "planned", caps: [] },
-  { id: "cloudflare", state: "planned", caps: [] },
-  { id: "aws", state: "planned", caps: [] },
+  { id: "vercel", via: "REST", caps: "deploys · build logs · webhooks" },
+  { id: "railway", via: "GraphQL", caps: "deploys · build + runtime logs" },
+  { id: "github", via: "REST", caps: "commits · diffs · webhooks" },
 ] as const;
+const PLANNED = ["render", "fly", "netlify", "cloudflare", "aws"] as const;
 
 export function Integrations() {
   return (
-    <section id="integrations" className="relative px-4 py-28">
-      <SectionHeading eyebrow="Integrations" lead="Three today." rest="The adapter contract is the roadmap: one file and one registry line per provider." />
-      <div className="mx-auto mt-14 grid max-w-6xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <Section
+      id="integrations"
+      no="04"
+      label="Integrations"
+      title={["Three today.", "One file each."]}
+      lead="One contract. One file per provider."
+    >
+      <div className="label mb-3">Table 3 — provider manifest</div>
+      <div className="border-t border-line">
         {PROVIDERS.map((p, i) => (
-          <Reveal key={p.id} delay={0.04 * i}>
-            <Spotlight className={`panel flex h-full min-h-[132px] flex-col p-4 ${p.state === "planned" ? "opacity-60" : ""}`}>
-              <div className="flex items-center justify-between">
-                <span className="grid size-9 place-items-center rounded-lg border border-line bg-raised">
-                  <ProviderIcon provider={p.id} size={16} />
-                </span>
-                {p.state === "available" ? <Tag color="var(--ok)">available</Tag> : <Tag>planned</Tag>}
-              </div>
-              <div className="mt-4 text-[14.5px] font-medium">{providerName(p.id)}</div>
-              <div className="mt-1 font-mono text-[11px] text-muted">{p.caps.length ? p.caps.join(" · ") : "adapter not written yet"}</div>
-            </Spotlight>
-          </Reveal>
-        ))}
-        <Reveal delay={0.3} className="sm:col-span-2 lg:col-span-4">
-          <Spotlight className="panel flex flex-col items-start justify-between gap-4 border-dashed p-5 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-4">
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-dashed border-accent/50 text-accent">
-                <Plus size={16} />
+          <Rise key={p.id} delay={0.04 * i}>
+            <div className="grid grid-cols-[32px_1fr_auto] items-center gap-x-4 border-b border-line py-4 sm:grid-cols-[32px_180px_90px_1fr_110px]">
+              <ProviderIcon provider={p.id} size={15} />
+              <span className="text-[16px] font-medium">{providerName(p.id)}</span>
+              <span className="mono hidden text-[12px] sm:block">{p.via}</span>
+              <span className="mono hidden text-[12px] text-muted sm:block">{p.caps}</span>
+              <span className="mono text-right text-[11px] uppercase tracking-[0.12em] text-ok">
+                <span className="mr-2 inline-block size-1.5 translate-y-[-1px] bg-ok" />
+                available
               </span>
-              <div>
-                <div className="text-[14.5px] font-medium">Write your own adapter</div>
-                <div className="mt-0.5 text-[13px] text-muted">
-                  Implement <code className="font-mono text-fg">ProviderAdapter</code>, declare its capabilities, register it. The console picks it up from the
-                  catalog endpoint.
-                </div>
-              </div>
             </div>
-            <a href={`${REPO_URL}/blob/main/docs/adding-a-provider.md`} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[12px] text-accent hover:underline">
-              docs/adding-a-provider.md <ArrowUpRight size={12} />
-            </a>
-          </Spotlight>
-        </Reveal>
+          </Rise>
+        ))}
+        <div className="grid grid-cols-[32px_1fr_auto] items-center gap-x-4 border-b border-line py-4 text-faint">
+          <span />
+          <span className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[15px]">
+            {PLANNED.map((id) => (
+              <span key={id} className="flex items-center gap-2">
+                <ProviderIcon provider={id} size={13} className="opacity-50 grayscale" />
+                {providerName(id)}
+              </span>
+            ))}
+          </span>
+          <span className="mono text-right text-[11px] uppercase tracking-[0.12em]">planned</span>
+        </div>
+        <a
+          href={`${REPO_URL}/blob/main/docs/adding-a-provider.md`}
+          target="_blank"
+          rel="noreferrer"
+          className="group grid grid-cols-[32px_1fr_auto] items-center gap-x-4 border-b border-line py-5 transition-colors hover:bg-raised"
+        >
+          <span className="mono text-[15px] text-fg">+</span>
+          <span className="text-[16px] font-medium">
+            Write your own adapter
+          </span>
+          <span className="mono flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted group-hover:text-fg">
+            guide <ArrowUpRight size={12} />
+          </span>
+        </a>
       </div>
-    </section>
+    </Section>
   );
 }
 
@@ -71,12 +80,12 @@ const LINES: { cmd?: string; out?: string; tone?: "ok" | "muted" }[] = [
   { cmd: `git clone ${REPO_URL}.git && cd opscend` },
   { cmd: "cp .env.example .env   # add GROQ_API_KEY" },
   { cmd: "docker compose up" },
-  { out: "✔ postgres   healthy", tone: "ok" },
-  { out: "✔ redis      healthy", tone: "ok" },
-  { out: "✔ api        http://localhost:8000/api/docs", tone: "ok" },
-  { out: "✔ worker     polling every 30s", tone: "ok" },
-  { out: "✔ web        http://localhost:3000", tone: "ok" },
-  { out: "Demo mode on: sample deploys seeded. Connect a provider in Integrations.", tone: "muted" },
+  { out: "[ok] postgres   healthy", tone: "ok" },
+  { out: "[ok] redis      healthy", tone: "ok" },
+  { out: "[ok] api        http://localhost:8000/api/docs", tone: "ok" },
+  { out: "[ok] worker     polling every 60s", tone: "ok" },
+  { out: "[ok] web        http://localhost:3000", tone: "ok" },
+  { out: "Demo mode on. Sample deploys seeded.", tone: "muted" },
 ];
 
 function TerminalDemo() {
@@ -103,18 +112,18 @@ function TerminalDemo() {
   }, [inView, line, chars]);
 
   return (
-    <div ref={ref} className="code min-h-[268px] p-5 text-[12.5px]">
+    <div ref={ref} className="mono min-h-[280px] p-5 text-[12.5px] leading-[1.75]">
       {LINES.slice(0, line + 1).map((l, i) => {
         if (l.cmd) {
           const text = i === line ? l.cmd.slice(0, chars) : l.cmd;
           const [main, comment] = text.split("   #");
           return (
-            <div key={i} className="flex gap-2">
-              <span className="select-none text-accent">$</span>
+            <div key={i} className="flex gap-3">
+              <span className="select-none text-faint">$</span>
               <span className="break-all">
                 {main}
                 {comment !== undefined && <span className="text-faint">   #{comment}</span>}
-                {i === line && <span className="ml-0.5 inline-block h-3.5 w-1.5 translate-y-0.5 animate-caret bg-fg" />}
+                {i === line && <span className="ml-0.5 inline-block h-3.5 w-2 translate-y-0.5 animate-caret bg-fg" />}
               </span>
             </div>
           );
@@ -134,91 +143,72 @@ export function Quickstart() {
     .map((l) => l.cmd!.split("   #")[0])
     .join("\n");
   return (
-    <section id="quickstart" className="relative px-4 py-28">
-      <SectionHeading eyebrow="Quickstart" lead="Clone. Compose. Break something." rest="Running on a clean machine in under five minutes." />
-      <div className="mx-auto mt-14 grid max-w-6xl gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Reveal>
-          <div className="panel overflow-hidden">
-            <div className="flex h-10 items-center justify-between border-b border-line px-4">
-              <span className="label-mono">Terminal</span>
-              <CopyButton value={copyAll} label="Copy commands" />
-            </div>
-            <TerminalDemo />
+    <Section id="quickstart" no="05" label="Quickstart" title={["Clone. Compose.", "Break something."]} lead="A few minutes on a clean machine.">
+      <div className="grid grid-cols-1 border border-line lg:grid-cols-[1.4fr_1fr]">
+        <Rise className="min-w-0 border-b border-line bg-surface lg:border-b-0 lg:border-r">
+          <div className="label flex h-10 items-center justify-between border-b border-line px-5">
+            <span>Terminal</span>
+            <CopyButton value={copyAll} label="Copy commands" />
           </div>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <div className="panel flex h-full flex-col divide-y divide-line">
+          <TerminalDemo />
+        </Rise>
+        <Rise delay={0.08}>
+          <ol>
             {[
-              { n: "1", t: "Sign in", d: "Single local user. Credentials come from your .env." },
-              { n: "2", t: "Connect providers", d: "Paste a Vercel, Railway or GitHub token. Test the connection, see its capabilities." },
-              { n: "3", t: "Push a bad commit", d: "Or use the Chaos lab to script a failure. Click Investigate and watch the trace." },
-            ].map((s) => (
-              <div key={s.n} className="flex flex-1 items-start gap-4 p-5">
-                <span className="grid size-6 shrink-0 place-items-center rounded-md border border-line bg-raised font-mono text-[11px] text-accent">{s.n}</span>
+              ["Sign in", "Credentials from your .env."],
+              ["Connect providers", "Paste a token."],
+              ["Break something", "Then click Investigate."],
+            ].map(([t, d], i) => (
+              <li key={t} className="grid grid-cols-[44px_1fr] border-b border-line px-5 py-6 last:border-b-0">
+                <span className="mono pt-1 text-[11.5px] text-faint">5.{i + 1}</span>
                 <div>
-                  <div className="text-[14.5px] font-medium">{s.t}</div>
-                  <p className="mt-1 text-[13px] leading-relaxed text-muted">{s.d}</p>
+                  <div className="text-[16px] font-medium">{t}</div>
+                  <p className="mt-1.5 text-[14px] leading-relaxed text-muted">{d}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
-        </Reveal>
+          </ol>
+        </Rise>
       </div>
-    </section>
+    </Section>
   );
 }
 
-// ───────────────────────────── closing CTA + footer
+// ───────────────────────────── closing statement + colophon
 
 export function Footer() {
   return (
-    <footer className="relative overflow-hidden px-4 pt-10">
-      <Reveal className="mx-auto max-w-6xl">
-        <div className="panel relative overflow-hidden px-6 py-20 text-center sm:py-28">
-          <div aria-hidden className="bg-grid absolute inset-0 [mask-image:radial-gradient(60%_70%_at_50%_100%,black,transparent)]" />
-          <div
-            aria-hidden
-            className="absolute bottom-[-14rem] left-1/2 h-[26rem] w-[46rem] -translate-x-1/2 rounded-full blur-3xl"
-            style={{ background: "radial-gradient(closest-side, color-mix(in oklab, var(--accent) 22%, transparent), transparent)" }}
-          />
-          <div className="relative">
-            <h2 className="text-gradient mx-auto max-w-2xl text-balance text-[34px] font-medium leading-[1.08] tracking-[-0.03em] sm:text-[52px]">
-              The next red deploy explains itself.
-            </h2>
-            <p className="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted">Open source, self-hosted, and honest about what it does not know.</p>
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <ButtonLink href="/console" variant="primary" size="lg" className="group h-11 px-5">
-                Open the console <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
-              </ButtonLink>
-              <a
-                href={REPO_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-line bg-raised px-5 text-[14px] font-medium transition-colors hover:border-[#3a3a3f]"
-              >
-                <ProviderIcon provider="github" size={15} /> Star on GitHub
-              </a>
-            </div>
-          </div>
-        </div>
-      </Reveal>
-
-      <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 py-10 sm:flex-row sm:items-center">
-        <div>
-          <Wordmark />
-          <p className="mt-2 font-mono text-[11px] text-faint">open source · built in public</p>
-        </div>
-        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted">
-          <Link href="/console" className="hover:text-fg">Console</Link>
-          <a href={API_DOCS_URL} className="hover:text-fg">API reference</a>
-          <a href="#integrations" className="hover:text-fg">Integrations</a>
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-fg">GitHub</a>
-        </nav>
+    <footer>
+      <Rule />
+      <div className="mx-auto max-w-[1360px] px-5 py-20 sm:px-8 lg:py-28">
+        <h2 className="display text-[clamp(52px,11vw,168px)]">
+          <Lines lines={["The next red deploy", <span key="e">explains itself<span className="text-[var(--signal)]">.</span></span>]} />
+        </h2>
+        <Rise delay={0.2} className="mt-10 flex flex-wrap items-stretch gap-3">
+          <Link href="/console" className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
+            Open the console <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+          </Link>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex h-12 items-center gap-3 border border-line px-6 text-[15px] font-medium transition-colors hover:bg-raised">
+            <ProviderIcon provider="github" size={15} /> Source on GitHub
+          </a>
+        </Rise>
       </div>
 
-      {/* oversized wordmark */}
-      <div aria-hidden className="mask-fade-b pointer-events-none mx-auto -mb-[4vw] max-w-6xl select-none text-center text-[21vw] font-semibold leading-[0.8] tracking-[-0.06em] text-raised lg:text-[250px]">
-        opscend
+      <div className="border-t border-line">
+        <div className="label mx-auto grid max-w-[1360px] gap-y-4 px-5 py-6 sm:grid-cols-[1fr_auto] sm:px-8">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <Wordmark className="normal-case tracking-normal" />
+            <span>v{VERSION}</span>
+            <span>open source</span>
+            <span>built in public</span>
+          </div>
+          <nav className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link href="/console" className="hover:text-fg">Console</Link>
+            <a href={API_DOCS_URL} className="hover:text-fg">API reference</a>
+            <a href="#integrations" className="hover:text-fg">Integrations</a>
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-fg">GitHub</a>
+          </nav>
+        </div>
       </div>
     </footer>
   );
