@@ -1,0 +1,24 @@
+# secrets and local config
+.env
+.env.*
+!.env.example
+api/.opscend_secret_key
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# local databases
+*.db
+*.db-shm
+*.db-wal
+
+# node / next (web/.gitignore has the details)
+node_modules/
+.next/
+
+# misc
+.DS_Store
