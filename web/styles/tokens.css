@@ -1,0 +1,30 @@
+/*
+ * Opscend design tokens. Dark-first; borders over shadows; mono for data.
+ * Change a value here and it flows through Tailwind (see app/globals.css).
+ */
+:root {
+  --bg: #020202;
+  --surface: #0b0b0c;
+  --raised: #141416;
+  --line: #232326;
+  --line-soft: #18181a;
+
+  --fg: #ededed;
+  --muted: #8a8a8f;
+  --faint: #55555b;
+
+  /* One accent for anything interactive. */
+  --accent: #c4f042;
+  --accent-ink: #0c1200;
+
+  /* Status */
+  --ok: #3dd68c;
+  --warn: #f5b544;
+  --err: #f2555a;
+  --info: #5b9dff;
+
+  /* Provider identity (used for timeline rails and icons only). */
+  --vercel: #f5f5f5;
+  --railway: #b48cff;
+  --github: #8fa3bf;
+}

@@ -1,0 +1,261 @@
+/**
+ * Opscend API contract.
+ *
+ * This file is the single source of truth for the JSON the API returns.
+ * The FastAPI response models in api/app/schemas.py mirror it field for field.
+ * All timestamps are ISO-8601 UTC strings. All ids are strings.
+ */
+
+export type Provider = "vercel" | "railway" | "github" | (string & {});
+
+export type Capability =
+  | "LIST_SERVICES"
+  | "LIST_DEPLOYS"
+  | "BUILD_LOGS"
+  | "RUNTIME_LOGS"
+  | "WEBHOOKS"
+  | "COMMITS"
+  | "COMMIT_DIFF";
+
+export type DeployStatus = "queued" | "building" | "ready" | "failed" | "canceled";
+export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogKind = "build" | "runtime";
+export type HealthState = "up" | "down" | "unknown";
+export type Confidence = "low" | "medium" | "high";
+
+// ───────────────────────────── system / auth
+
+export interface SystemInfo {
+  version: string;
+  demo_mode: boolean;
+  ai: { provider: string; model: string; configured: boolean };
+  queue: "arq" | "inline";
+  database: "postgresql" | "sqlite";
+}
+
+export interface User {
+  id: string;
+  email: string;
+}
+
+// ───────────────────────────── integrations
+
+/** One entry per adapter known to the provider registry (connected or not). */
+export interface ProviderManifest {
+  provider: Provider;
+  name: string;
+  description: string;
+  /** "available" adapters can be connected today; "planned" are roadmap placeholders. */
+  availability: "available" | "planned";
+  capabilities: Capability[];
+  /** What the user pastes, e.g. "Personal access token". */
+  token_label: string;
+  token_help_url: string | null;
+  /** Extra non-secret config fields the adapter needs, e.g. team id. */
+  config_fields: { key: string; label: string; required: boolean; placeholder: string }[];
+  webhook_path: string | null;
+}
+
+export interface Integration {
+  id: string;
+  provider: Provider;
+  account_name: string | null;
+  status: "connected" | "error" | "pending";
+  status_detail: string | null;
+  capabilities: Capability[];
+  /** Last 4 characters only. The full token never leaves the API. */
+  token_hint: string;
+  is_demo: boolean;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+// ───────────────────────────── core entities
+
+export interface Service {
+  id: string;
+  integration_id: string;
+  provider: Provider;
+  external_id: string;
+  name: string;
+  repo: string | null;
+  health_url: string | null;
+  health: HealthState;
+  latency_ms: number | null;
+  /** Last 24 checks, oldest first. */
+  health_history: { status_code: number | null; latency_ms: number | null; ok: boolean; checked_at: string }[];
+  last_deploy_status: DeployStatus | null;
+  last_deploy_at: string | null;
+}
+
+export interface Commit {
+  repo: string;
+  sha: string;
+  message: string;
+  author: string;
+  committed_at: string;
+  url: string | null;
+}
+
+export interface Deployment {
+  id: string;
+  service_id: string;
+  service_name: string;
+  provider: Provider;
+  external_id: string;
+  status: DeployStatus;
+  commit_sha: string | null;
+  commit_message: string | null;
+  commit_author: string | null;
+  branch: string | null;
+  environment: string | null;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  url: string | null;
+}
+
+export interface DeploymentDetail extends Deployment {
+  service: Service;
+  commit: Commit | null;
+  capabilities: Capability[];
+  incident_id: string | null;
+  /** Most recent investigation for this deployment, if any. */
+  investigation_id: string | null;
+}
+
+export interface LogLine {
+  /** Stable id used as an evidence reference, e.g. "log_4f2a". */
+  id: string;
+  ts: string;
+  level: LogLevel;
+  message: string;
+  kind: LogKind;
+}
+
+export interface CommitDiff {
+  repo: string;
+  sha: string;
+  message: string;
+  author: string;
+  files: {
+    filename: string;
+    status: "added" | "modified" | "removed" | "renamed";
+    additions: number;
+    deletions: number;
+    /** Unified diff patch text; may be null for binary files. */
+    patch: string | null;
+  }[];
+}
+
+export interface Incident {
+  id: string;
+  service_id: string;
+  service_name: string;
+  provider: Provider;
+  trigger: "deploy_failed" | "health_check_failed";
+  status: "open" | "resolved";
+  title: string;
+  deployment_id: string | null;
+  investigation_id: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+}
+
+// ───────────────────────────── timeline
+
+export type TimelineItem =
+  | { kind: "deployment"; id: string; at: string; provider: Provider; deployment: Deployment }
+  | { kind: "commit"; id: string; at: string; provider: "github"; commit: Commit }
+  | { kind: "incident"; id: string; at: string; provider: Provider; incident: Incident };
+
+// ───────────────────────────── overview
+
+export interface Overview {
+  stats: {
+    services: number;
+    services_down: number;
+    deploys_24h: number;
+    failed_24h: number;
+    open_incidents: number;
+    investigations: number;
+  };
+  services: Service[];
+  incidents: Incident[];
+  deployments: Deployment[];
+  /** Deploy counts per hour for the last 24h, oldest first. */
+  activity: { hour: string; ready: number; failed: number }[];
+}
+
+// ───────────────────────────── investigator
+
+export type EvidenceRef =
+  | { type: "log"; ref: string; deployment_id: string; quote: string }
+  | { type: "commit"; ref: string; quote: string }
+  | { type: "deploy"; ref: string; quote: string }
+  | { type: "health"; ref: string; quote: string };
+
+export interface InvestigationReport {
+  inconclusive: boolean;
+  likely_cause: string;
+  confidence: Confidence;
+  /** Short one-line headline for lists. */
+  summary: string;
+  culprit_commit_sha: string | null;
+  evidence: EvidenceRef[];
+  suggested_fix: string | null;
+  /** Filled when inconclusive: what data was missing. */
+  missing: string | null;
+}
+
+export interface InvestigationStep {
+  id: string;
+  index: number;
+  /** "llm" for a model turn, "tool" for a tool call, "report" for the final answer. */
+  type: "llm" | "tool" | "report";
+  /** Tool name for tool steps, model id for llm steps. */
+  name: string;
+  input: Record<string, unknown> | null;
+  output_summary: string | null;
+  started_at: string;
+  duration_ms: number | null;
+  tokens: number | null;
+  status: "running" | "ok" | "error";
+}
+
+export interface Investigation {
+  id: string;
+  deployment_id: string | null;
+  incident_id: string | null;
+  service_name: string | null;
+  status: "queued" | "running" | "completed" | "failed";
+  error: string | null;
+  model: string;
+  tokens_used: number;
+  duration_ms: number | null;
+  created_at: string;
+  finished_at: string | null;
+  report: InvestigationReport | null;
+  steps: InvestigationStep[];
+}
+
+// ───────────────────────────── developer console
+
+export interface RawEvent {
+  id: string;
+  provider: Provider;
+  source: "webhook" | "poll" | "demo";
+  event_type: string;
+  dedup_key: string;
+  received_at: string;
+  processed_at: string | null;
+  /** True when this delivery was dropped as a duplicate of an earlier event. */
+  duplicate: boolean;
+  payload: unknown;
+}
+
+export interface DemoScenario {
+  id: string;
+  title: string;
+  description: string;
+}
