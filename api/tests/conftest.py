@@ -50,6 +50,9 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         "OPSCEND_BACKGROUND_JOBS": "0",
         "OPSCEND_AI_MODEL": "test-model",
         "GROQ_API_KEY": "",
+        "OPSCEND_SMTP_HOST": "",
+        "OPSCEND_EMAIL_FROM": "",
+        "OPSCEND_EMAIL_TO": "",
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)
