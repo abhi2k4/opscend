@@ -1,0 +1,157 @@
+"""The polling reconciler: catches whatever webhooks missed.
+
+Poll results take the same road as webhooks: each new deployment state or commit
+becomes a `raw_event` (source "poll") and is then normalized, so a state already
+seen costs one dedup lookup and nothing else.
+"""
+
+import logging
+from datetime import timedelta
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import session_scope
+from app.core.time import utcnow
+from app.integrations.base import (
+    CommitSource,
+    NormalizedBatch,
+    ProviderAdapter,
+    ProviderError,
+    RawEventIn,
+    ServiceIn,
+)
+from app.integrations.connect import adapter_for, service_ref
+from app.models import Integration, Service
+from app.schemas import Capability
+
+from .normalizer import process_raw_event, reprocess_pending
+from .store import record_event
+
+log = logging.getLogger(__name__)
+
+FIRST_SYNC_WINDOW = timedelta(days=7)
+RESYNC_OVERLAP = timedelta(hours=6)
+
+
+async def sync_integration(integration_id: str) -> None:
+    """Job: pull services, deployments and commits for one integration."""
+    async with session_scope() as session:
+        integration = await session.get(Integration, integration_id)
+        if integration is None:
+            return
+        if integration.is_demo:
+            integration.last_synced_at = utcnow()
+            await session.commit()
+            return
+        adapter = adapter_for(integration)
+        try:
+            await _sync(session, integration, adapter)
+            status, detail = "connected", None
+        except ProviderError as exc:
+            await session.rollback()
+            status, detail = "error", str(exc)
+        finally:
+            await adapter.aclose()
+        integration = await session.get(Integration, integration_id)
+        if integration is not None:
+            integration.status, integration.status_detail = status, detail
+            if status == "connected":
+                integration.last_synced_at = utcnow()
+            await session.commit()
+
+
+async def reconcile() -> None:
+    """Job (cron): replay events whose job was lost, then sync every real integration."""
+    await reprocess_pending()
+    async with session_scope() as session:
+        ids = (
+            await session.scalars(select(Integration.id).where(Integration.is_demo.is_(False)))
+        ).all()
+    for integration_id in ids:
+        try:
+            await sync_integration(integration_id)
+        except Exception:  # one broken integration must not stop the others
+            log.exception("sync failed for integration %s", integration_id)
+
+
+async def _sync(session: AsyncSession, integration: Integration, adapter: ProviderAdapter) -> None:
+    since = (
+        integration.last_synced_at - RESYNC_OVERLAP
+        if integration.last_synced_at
+        else utcnow() - FIRST_SYNC_WINDOW
+    )
+    provider, integration_id = integration.provider, integration.id
+    capabilities = set(integration.capabilities)
+    events: list[RawEventIn] = []
+
+    if Capability.LIST_SERVICES in capabilities:
+        await _upsert_services(session, integration, await adapter.list_services())
+    if Capability.LIST_DEPLOYS in capabilities:
+        services = (
+            await session.scalars(select(Service).where(Service.integration_id == integration_id))
+        ).all()
+        for service in services:
+            deployments = await adapter.list_deployments(service_ref(service), since)
+            # Newest first: during a backfill an old failure then sees its successor
+            # and opens no incident (see incidents/rules.py).
+            for deployment in sorted(deployments, key=lambda d: d.started_at, reverse=True):
+                events.append(
+                    RawEventIn(
+                        provider=provider,
+                        event_type="poll.deployment",
+                        dedup_key=f"{provider}:poll:{deployment.external_id}:{deployment.status}",
+                        payload=NormalizedBatch(deployments=[deployment]).model_dump(mode="json"),
+                    )
+                )
+    if Capability.COMMITS in capabilities and isinstance(adapter, CommitSource):
+        for repo in await _repos(session, adapter):
+            for commit in await adapter.list_commits(repo, since):
+                events.append(
+                    RawEventIn(
+                        provider=provider,
+                        event_type="poll.commit",
+                        dedup_key=f"{provider}:poll:commit:{repo}:{commit.sha}",
+                        payload=NormalizedBatch(commits=[commit]).model_dump(mode="json"),
+                    )
+                )
+
+    for event in events:
+        row = await record_event(session, event, source="poll", keep_duplicate=False)
+        if row is not None:
+            await process_raw_event(row.id)
+
+
+async def _repos(session: AsyncSession, adapter: CommitSource) -> list[str]:
+    """Repos to watch: the adapter's own list plus every repo a service is linked to."""
+    linked = (
+        await session.scalars(select(Service.repo).where(Service.repo.is_not(None)).distinct())
+    ).all()
+    return sorted({*await adapter.list_repos(), *linked})
+
+
+async def _upsert_services(
+    session: AsyncSession, integration: Integration, incoming: list[ServiceIn]
+) -> None:
+    existing = {
+        service.external_id: service
+        for service in await session.scalars(
+            select(Service).where(Service.provider == integration.provider)
+        )
+    }
+    for item in incoming:
+        service = existing.get(item.external_id)
+        if service is None:
+            session.add(
+                Service(
+                    integration_id=integration.id,
+                    provider=integration.provider,
+                    **item.model_dump(),
+                )
+            )
+            continue
+        service.integration_id = integration.id
+        service.name, service.meta = item.name, item.meta
+        service.repo = item.repo or service.repo
+        service.health_url = service.health_url or item.health_url
+    await session.commit()
