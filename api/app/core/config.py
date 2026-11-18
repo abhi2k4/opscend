@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     groq_api_key: str | None = Field(None, alias="GROQ_API_KEY")
     ai_provider: str = Field("groq", alias="OPSCEND_AI_PROVIDER")
-    ai_model: str = Field("llama-3.3-70b-versatile", alias="OPSCEND_AI_MODEL")
+    ai_model: str = Field("openai/gpt-oss-120b", alias="OPSCEND_AI_MODEL")
     ai_base_url: str = Field("https://api.groq.com/openai/v1", alias="OPSCEND_AI_BASE_URL")
     ai_max_tool_calls: int = Field(8, alias="OPSCEND_AI_MAX_TOOL_CALLS")
     ai_token_budget: int = Field(40_000, alias="OPSCEND_AI_TOKEN_BUDGET")
