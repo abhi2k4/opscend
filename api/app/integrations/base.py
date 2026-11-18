@@ -21,6 +21,10 @@ class ProviderError(Exception):
     """A provider rejected a call. The message is safe to show the user (never holds a token)."""
 
 
+class ResourceUnavailableError(ProviderError):
+    """One resource (a repo, a project) is out of this token's reach; the rest still work."""
+
+
 class WebhookVerificationError(Exception):
     """A webhook delivery failed signature or shared-secret verification."""
 

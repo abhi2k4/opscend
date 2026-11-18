@@ -19,6 +19,7 @@ from app.integrations.base import (
     ProviderAdapter,
     ProviderError,
     RawEventIn,
+    ResourceUnavailableError,
     ServiceIn,
 )
 from app.integrations.connect import adapter_for, service_ref
@@ -46,8 +47,8 @@ async def sync_integration(integration_id: str) -> None:
             return
         adapter = adapter_for(integration)
         try:
-            await _sync(session, integration, adapter)
-            status, detail = "connected", None
+            skipped = await _sync(session, integration, adapter)
+            status, detail = "connected", _skipped_note(skipped)
         except ProviderError as exc:
             await session.rollback()
             status, detail = "error", str(exc)
@@ -75,7 +76,17 @@ async def reconcile() -> None:
             log.exception("sync failed for integration %s", integration_id)
 
 
-async def _sync(session: AsyncSession, integration: Integration, adapter: ProviderAdapter) -> None:
+def _skipped_note(skipped: list[str]) -> str | None:
+    if not skipped:
+        return None
+    shown = ", ".join(skipped[:3]) + (f" and {len(skipped) - 3} more" if len(skipped) > 3 else "")
+    return f"Connected, but this token cannot read {len(skipped)} linked repo(s): {shown}"
+
+
+async def _sync(
+    session: AsyncSession, integration: Integration, adapter: ProviderAdapter
+) -> list[str]:
+    """Sync one integration. Returns the resources that were skipped as unreadable."""
     since = (
         integration.last_synced_at - RESYNC_OVERLAP
         if integration.last_synced_at
@@ -84,6 +95,7 @@ async def _sync(session: AsyncSession, integration: Integration, adapter: Provid
     provider, integration_id = integration.provider, integration.id
     capabilities = set(integration.capabilities)
     events: list[RawEventIn] = []
+    skipped: list[str] = []
 
     if Capability.LIST_SERVICES in capabilities:
         await _upsert_services(session, integration, await adapter.list_services())
@@ -106,7 +118,13 @@ async def _sync(session: AsyncSession, integration: Integration, adapter: Provid
                 )
     if Capability.COMMITS in capabilities and isinstance(adapter, CommitSource):
         for repo in await _repos(session, adapter):
-            for commit in await adapter.list_commits(repo, since):
+            try:
+                commits = await adapter.list_commits(repo, since)
+            except ResourceUnavailableError:
+                # One private or empty repo must not fail the whole integration.
+                skipped.append(repo)
+                continue
+            for commit in commits:
                 events.append(
                     RawEventIn(
                         provider=provider,
@@ -120,12 +138,19 @@ async def _sync(session: AsyncSession, integration: Integration, adapter: Provid
         row = await record_event(session, event, source="poll", keep_duplicate=False)
         if row is not None:
             await process_raw_event(row.id)
+    return skipped
 
 
 async def _repos(session: AsyncSession, adapter: CommitSource) -> list[str]:
     """Repos to watch: the adapter's own list plus every repo a service is linked to."""
     linked = (
-        await session.scalars(select(Service.repo).where(Service.repo.is_not(None)).distinct())
+        await session.scalars(
+            select(Service.repo)
+            .join(Integration, Integration.id == Service.integration_id)
+            # Demo services point at repos that do not exist on GitHub.
+            .where(Service.repo.is_not(None), Integration.is_demo.is_(False))
+            .distinct()
+        )
     ).all()
     return sorted({*await adapter.list_repos(), *linked})
 

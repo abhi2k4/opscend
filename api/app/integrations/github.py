@@ -20,6 +20,7 @@ from app.integrations.base import (
     NormalizedBatch,
     ProviderError,
     RawEventIn,
+    ResourceUnavailableError,
     ServiceIn,
     ServiceRef,
     WebhookVerificationError,
@@ -76,6 +77,7 @@ class GitHubAdapter(HttpAdapter):
             response = await self.client.get(
                 f"{API}{path}",
                 params=params,
+                follow_redirects=True,  # renamed or transferred repos answer 301
                 headers={
                     "Authorization": f"Bearer {self._token}",
                     "Accept": "application/vnd.github+json",
@@ -88,8 +90,11 @@ class GitHubAdapter(HttpAdapter):
             raise ProviderError("GitHub rejected the token")
         if response.status_code == 403 and response.headers.get("x-ratelimit-remaining") == "0":
             raise ProviderError("GitHub rate limit reached; the next poll will retry")
-        if response.status_code == 404:
-            raise ProviderError(f"GitHub: {path} not found or not visible to this token")
+        if response.status_code in (403, 404, 409, 451):
+            # 403: a fine-grained token without access to this repo. 409: an empty repo.
+            raise ResourceUnavailableError(
+                f"GitHub: {path} is not readable with this token (HTTP {response.status_code})"
+            )
         if response.status_code >= 400:
             raise ProviderError(f"GitHub API returned HTTP {response.status_code} for {path}")
         return response.json()
@@ -124,6 +129,8 @@ class GitHubAdapter(HttpAdapter):
             since=since.strftime("%Y-%m-%dT%H:%M:%SZ"),
             per_page=50,
         )
+        if not isinstance(items, list):
+            raise ResourceUnavailableError(f"GitHub: unexpected commits response for {repo}")
         return [_commit_from_api(repo, item) for item in items]
 
     async def get_commit_diff(self, repo: str, sha: str) -> CommitDiff:

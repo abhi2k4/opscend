@@ -94,7 +94,7 @@ export default function IntegrationsPage() {
                 <span>token ••••{i.token_hint}</span>
                 <span className="text-faint">synced {timeAgo(i.last_synced_at, now)}</span>
               </div>
-              {i.status_detail && i.status === "error" && <div className="mt-1 text-[12px] text-err">{i.status_detail}</div>}
+              {i.status_detail && <div className={`mt-1 text-[12px] ${i.status === "error" ? "text-err" : "text-warn"}`}>{i.status_detail}</div>}
             </div>
             <div className="hidden lg:block">
               <Caps caps={i.capabilities} />
