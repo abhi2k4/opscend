@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConfidenceMeter, Dot, Tag } from "@/components/ui/primitives";
 import { ProviderIcon } from "@/components/ui/provider";
 import { cn } from "@/lib/format";
+import { SmoothHeight } from "./reveal";
 
 /**
  * Scripted, looping walkthrough of the one demo that defines Opscend:
@@ -28,7 +29,7 @@ const SPANS = [
   { type: "report", name: "submit_report", ms: 18, start: 96 },
 ] as const;
 
-const SPAN_COLOR = { llm: "var(--info)", tool: "var(--accent)", report: "var(--ok)" };
+const SPAN_COLOR = { llm: "var(--info)", tool: "var(--fg)", report: "var(--ok)" };
 
 export function HeroDemo() {
   const ref = useRef<HTMLDivElement>(null);
@@ -51,34 +52,21 @@ export function HeroDemo() {
 
   return (
     <div ref={ref} className="relative">
-      {/* glow under the window */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -inset-x-10 -top-16 h-72 opacity-60 blur-3xl transition-[background] duration-1000"
-        style={{
-          background: `radial-gradient(50% 60% at 50% 40%, color-mix(in oklab, ${failed && phase < 5 ? "var(--err)" : "var(--accent)"} 22%, transparent), transparent)`,
-        }}
-      />
-      <div className="relative overflow-hidden rounded-2xl border border-line bg-surface/90 shadow-[0_40px_120px_-20px_rgb(0_0_0/0.9)] backdrop-blur">
+      <div className="relative overflow-hidden border border-line bg-surface">
         {/* window chrome */}
         <div className="flex h-10 items-center gap-3 border-b border-line px-4">
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <span key={i} className="size-2.5 rounded-full bg-line" />
-            ))}
-          </div>
           <div className="label-mono flex items-center gap-2 normal-case tracking-normal">
             <span className="text-faint">opscend</span>
             <span className="text-faint">/</span>
             <span className="text-fg">{phase >= 4 ? "investigations / inv_3f9a" : "timeline"}</span>
           </div>
           <div className="ml-auto flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-wider text-muted">
-            <Dot color="var(--ok)" pulse />
+            <span className="blink size-2 bg-ok" />
             live
           </div>
         </div>
 
-        <div className="grid min-h-[380px] md:grid-cols-[1.05fr_1fr]">
+        <div className="grid min-h-[380px] grid-cols-1 md:grid-cols-[1.05fr_1fr]">
           {/* ── timeline ── */}
           <div className="relative border-b border-line p-4 md:border-b-0 md:border-r">
             <div className="label-mono mb-3 flex items-center justify-between">
@@ -128,8 +116,7 @@ export function HeroDemo() {
                               )}
                             >
                               <Sparkles size={11} /> Investigate
-                              {phase === 3 && <span className="absolute inset-0 animate-pulse-ring rounded-md bg-accent/50" />}
-                            </span>
+                                            </span>
                           </div>
                         </motion.div>
                       )}
@@ -163,7 +150,7 @@ export function HeroDemo() {
             <AnimatePresence>
               {(phase === 2 || phase === 3) && (
                 <motion.div
-                  className="pointer-events-none absolute z-10 text-fg drop-shadow-[0_2px_6px_rgb(0_0_0/0.8)]"
+                  className="pointer-events-none absolute z-10 text-fg"
                   initial={{ opacity: 0, right: "55%", top: "88%" }}
                   animate={{ opacity: 1, right: "7%", top: "112px" }}
                   exit={{ opacity: 0 }}
@@ -176,13 +163,15 @@ export function HeroDemo() {
           </div>
 
           {/* ── right pane ── */}
-          <div className="relative p-4">
-            <AnimatePresence mode="wait">
-              {phase < 4 && <Idle key="idle" failed={failed} />}
-              {phase === 4 && <Trace key="trace" />}
-              {phase === 5 && <Report key="report" />}
-            </AnimatePresence>
-          </div>
+          <SmoothHeight className="relative">
+            <div className="p-4">
+              <AnimatePresence mode="wait">
+                {phase < 4 && <Idle key="idle" failed={failed} />}
+                {phase === 4 && <Trace key="trace" />}
+                {phase === 5 && <Report key="report" />}
+              </AnimatePresence>
+            </div>
+          </SmoothHeight>
         </div>
 
         {/* progress rail */}
@@ -226,10 +215,10 @@ function Row({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: -14, filter: "blur(6px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)", x: shake ? [0, -5, 5, -3, 3, 0] : 0 }}
+      initial={{ opacity: 0, y: -14 }}
+      animate={{ opacity: 1, y: 0, x: shake ? [0, -5, 5, -3, 3, 0] : 0 }}
       exit={{ opacity: 0, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.5, delay, layout: { duration: 0.4 } }}
+      transition={{ duration: 0.55, delay, ease: [0.2, 0.7, 0.2, 1], layout: { duration: 0.5, ease: [0.2, 0.7, 0.2, 1] } }}
       className="relative flex gap-3"
     >
       <span className="relative z-[1] mt-1.5 grid size-[27px] shrink-0 place-items-center rounded-md border border-line bg-raised">
@@ -246,10 +235,10 @@ function Row({
 }
 
 const pane = {
-  initial: { opacity: 0, y: 10, filter: "blur(6px)" },
-  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
-  exit: { opacity: 0, y: -8, filter: "blur(6px)" },
-  transition: { duration: 0.35 },
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+  transition: { duration: 0.4, ease: [0.2, 0.7, 0.2, 1] as const },
 };
 
 function Idle({ failed }: { failed: boolean }) {
@@ -290,7 +279,7 @@ function Trace() {
       <div className="label-mono mb-3 flex items-center justify-between">
         <span>Agent run · investigator</span>
         <span className="flex items-center gap-1.5 text-accent">
-          <span className="size-1.5 animate-pulse rounded-full bg-accent" /> running
+          <span className="blink size-1.5 bg-accent" /> running
         </span>
       </div>
       <div className="space-y-1.5">
