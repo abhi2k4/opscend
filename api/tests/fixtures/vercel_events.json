@@ -1,0 +1,8 @@
+[
+  {"type": "command", "created": 1794996004100, "payload": {"deploymentId": "dpl_8mErrorBuild", "text": "Running \"vercel build\"", "id": "1", "date": 1794996004100, "serial": "1"}},
+  {"type": "stdout", "created": 1794996010200, "payload": {"deploymentId": "dpl_8mErrorBuild", "text": "Installing dependencies...\n", "id": "2", "date": 1794996010200, "serial": "2"}},
+  {"type": "stdout", "created": 1794996020000, "payload": {"deploymentId": "dpl_8mErrorBuild", "text": "warning: 2 peer dependencies are unmet", "id": "3", "date": 1794996020000, "serial": "3"}},
+  {"type": "stderr", "created": 1794996039000, "payload": {"deploymentId": "dpl_8mErrorBuild", "text": "Module not found: Can't resolve '@/components/ImageZoom'", "id": "4", "date": 1794996039000, "serial": "4"}},
+  {"type": "deployment-state", "created": 1794996041000, "payload": {"deploymentId": "dpl_8mErrorBuild", "info": {"type": "build", "readyState": "ERROR"}}},
+  {"type": "stderr", "created": 1794996041500, "date": 1794996041500, "text": "Error: Command \"pnpm run build\" exited with 1", "serial": "6"}
+]

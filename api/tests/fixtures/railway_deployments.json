@@ -1,0 +1,47 @@
+{
+  "data": {
+    "deployments": {
+      "edges": [
+        {
+          "node": {
+            "id": "dep-failed-0003",
+            "status": "FAILED",
+            "createdAt": "2026-11-18T05:52:09.000Z",
+            "updatedAt": "2026-11-18T05:54:49.000Z",
+            "staticUrl": null,
+            "environmentId": "env-prod-0001",
+            "meta": {
+              "repo": "acme/storefront",
+              "branch": "main",
+              "commitHash": "bb083918c9be1579a96112ac2a5779ee95256c89",
+              "commitAuthor": "Priya Nair",
+              "commitMessage": "feat(payments): verify Stripe webhook signatures\n\nCloses #412"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "dep-removed-0002",
+            "status": "REMOVED",
+            "createdAt": "2026-11-18T03:00:00.000Z",
+            "updatedAt": "2026-11-18T05:00:00.000Z",
+            "staticUrl": "storefront-api-production.up.railway.app",
+            "environmentId": "env-prod-0001",
+            "meta": {"branch": "main", "commitHash": "aa11", "commitAuthor": "Marcus", "commitMessage": "chore: logging"}
+          }
+        },
+        {
+          "node": {
+            "id": "dep-old-0001",
+            "status": "SUCCESS",
+            "createdAt": "2026-10-01T00:00:00.000Z",
+            "updatedAt": "2026-10-01T00:02:00.000Z",
+            "staticUrl": "storefront-api-production.up.railway.app",
+            "environmentId": "env-stg-0002",
+            "meta": null
+          }
+        }
+      ]
+    }
+  }
+}

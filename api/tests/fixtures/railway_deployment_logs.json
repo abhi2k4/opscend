@@ -1,0 +1,11 @@
+{
+  "data": {
+    "deploymentLogs": [
+      {"timestamp": "2026-11-18T05:53:10.120Z", "message": "Starting Container", "severity": "info"},
+      {"timestamp": "2026-11-18T05:53:11.480Z", "message": "Error: Missing required environment variable STRIPE_WEBHOOK_SECRET", "severity": "error"},
+      {"timestamp": "2026-11-18T05:53:11.481Z", "message": "    at required (/app/apps/api/dist/config/env.js:9:11)", "severity": "error"},
+      {"timestamp": "2026-11-18T05:53:12.000Z", "message": "Container exited with code 1", "severity": "warn"},
+      {"timestamp": null, "message": "dropped: no timestamp", "severity": "info"}
+    ]
+  }
+}

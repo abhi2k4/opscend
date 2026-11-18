@@ -1,0 +1,28 @@
+{
+  "id": "evt_3kd9Zp0aQ1",
+  "type": "deployment.error",
+  "createdAt": 1794996041000,
+  "payload": {
+    "team": {"id": "team_9xAcme"},
+    "user": {"id": "usr_1"},
+    "deployment": {
+      "id": "dpl_8mErrorBuild",
+      "name": "storefront-web",
+      "url": "storefront-web-8merror-acme.vercel.app",
+      "meta": {
+        "githubCommitSha": "9f2c1e7a44d0b6c3a1f5e8d27b90c4a6e3d1f052",
+        "githubCommitMessage": "feat(web): product image zoom",
+        "githubCommitAuthorName": "Dana Okafor",
+        "githubCommitRef": "main"
+      }
+    },
+    "links": {
+      "deployment": "https://vercel.com/acme/storefront-web/8mErrorBuild",
+      "project": "https://vercel.com/acme/storefront-web"
+    },
+    "target": "production",
+    "project": {"id": "prj_QmT4wq1storefront"},
+    "plan": "pro",
+    "regions": ["iad1"]
+  }
+}

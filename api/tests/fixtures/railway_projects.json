@@ -1,0 +1,26 @@
+{
+  "data": {
+    "projects": {
+      "edges": [
+        {
+          "node": {
+            "id": "c1f0a6de-2b7c-4d3e-9f18-6e5a4b3c2d10",
+            "name": "storefront",
+            "services": {
+              "edges": [
+                {"node": {"id": "5d0c7c1e-8f43-4b1e-9a57-2f6d1c0e8a11", "name": "storefront-api"}},
+                {"node": {"id": "b3a9e2f4-61d7-4c0a-8e52-7a4f9d3c1b60", "name": "worker"}}
+              ]
+            },
+            "environments": {
+              "edges": [
+                {"node": {"id": "env-prod-0001", "name": "production"}},
+                {"node": {"id": "env-stg-0002", "name": "staging"}}
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

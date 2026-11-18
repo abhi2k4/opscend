@@ -1,0 +1,52 @@
+{
+  "deployments": [
+    {
+      "uid": "dpl_8mErrorBuild",
+      "name": "storefront-web",
+      "url": "storefront-web-8merror-acme.vercel.app",
+      "created": 1794996000000,
+      "buildingAt": 1794996004000,
+      "ready": 1794996041000,
+      "state": "ERROR",
+      "readyState": "ERROR",
+      "type": "LAMBDAS",
+      "target": "production",
+      "creator": {"uid": "usr_1", "username": "dana"},
+      "meta": {
+        "githubCommitSha": "9f2c1e7a44d0b6c3a1f5e8d27b90c4a6e3d1f052",
+        "githubCommitMessage": "feat(web): product image zoom\n\nAdds the zoom component to the gallery.",
+        "githubCommitAuthorName": "Dana Okafor",
+        "githubCommitRef": "main",
+        "githubOrg": "acme",
+        "githubRepo": "storefront"
+      }
+    },
+    {
+      "uid": "dpl_7kReadyOne",
+      "name": "storefront-web",
+      "url": "storefront-web-7kready-acme.vercel.app",
+      "created": 1794990000000,
+      "buildingAt": 1794990003000,
+      "ready": 1794990075000,
+      "state": "READY",
+      "type": "LAMBDAS",
+      "target": null,
+      "meta": {
+        "githubCommitSha": "1b7d0c9e5f3a2d4c6b8a0e1f2d3c4b5a69788f10",
+        "githubCommitMessage": "fix(cart): keep quantity",
+        "githubCommitAuthorLogin": "dana-okafor",
+        "githubCommitRef": "fix/cart"
+      }
+    },
+    {
+      "uid": "dpl_6jBuilding",
+      "name": "storefront-web",
+      "url": "storefront-web-6jbuild-acme.vercel.app",
+      "created": 1794997000000,
+      "state": "BUILDING",
+      "target": "production",
+      "meta": {}
+    }
+  ],
+  "pagination": {"count": 3, "next": null, "prev": null}
+}

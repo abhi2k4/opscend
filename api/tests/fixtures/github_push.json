@@ -1,0 +1,20 @@
+{
+  "ref": "refs/heads/main",
+  "before": "1b7d0c9e5f3a2d4c6b8a0e1f2d3c4b5a69788f10",
+  "after": "bb083918c9be1579a96112ac2a5779ee95256c89",
+  "repository": {"id": 7, "name": "storefront", "full_name": "acme/storefront", "default_branch": "main"},
+  "pusher": {"name": "priya-nair", "email": "priya@acme.dev"},
+  "commits": [
+    {
+      "id": "bb083918c9be1579a96112ac2a5779ee95256c89",
+      "message": "feat(payments): verify Stripe webhook signatures",
+      "timestamp": "2026-11-18T11:21:30+05:30",
+      "url": "https://github.com/acme/storefront/commit/bb083918c9be1579a96112ac2a5779ee95256c89",
+      "author": {"name": "Priya Nair", "email": "priya@acme.dev", "username": "priya-nair"},
+      "added": [],
+      "removed": [],
+      "modified": ["apps/api/src/config/env.ts"]
+    }
+  ],
+  "head_commit": {"id": "bb083918c9be1579a96112ac2a5779ee95256c89"}
+}

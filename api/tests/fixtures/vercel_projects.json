@@ -1,0 +1,20 @@
+{
+  "projects": [
+    {
+      "id": "prj_QmT4wq1storefront",
+      "name": "storefront-web",
+      "accountId": "team_9xAcme",
+      "framework": "nextjs",
+      "link": {"type": "github", "org": "acme", "repo": "storefront", "productionBranch": "main"},
+      "updatedAt": 1794990000000
+    },
+    {
+      "id": "prj_Zk81docsSite",
+      "name": "docs",
+      "accountId": "team_9xAcme",
+      "framework": "astro",
+      "updatedAt": 1794980000000
+    }
+  ],
+  "pagination": {"count": 2, "next": null, "prev": null}
+}

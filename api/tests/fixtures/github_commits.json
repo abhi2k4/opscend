@@ -1,0 +1,21 @@
+[
+  {
+    "sha": "bb083918c9be1579a96112ac2a5779ee95256c89",
+    "html_url": "https://github.com/acme/storefront/commit/bb083918c9be1579a96112ac2a5779ee95256c89",
+    "commit": {
+      "author": {"name": "Priya Nair", "email": "priya@acme.dev", "date": "2026-11-18T05:51:30Z"},
+      "committer": {"name": "GitHub", "email": "noreply@github.com", "date": "2026-11-18T05:51:30Z"},
+      "message": "feat(payments): verify Stripe webhook signatures\n\nCloses #412"
+    },
+    "author": {"login": "priya-nair", "id": 1001}
+  },
+  {
+    "sha": "1b7d0c9e5f3a2d4c6b8a0e1f2d3c4b5a69788f10",
+    "html_url": "https://github.com/acme/storefront/commit/1b7d0c9e5f3a2d4c6b8a0e1f2d3c4b5a69788f10",
+    "commit": {
+      "author": {"name": null, "date": "2026-11-18T04:10:00Z"},
+      "message": "fix(cart): keep quantity"
+    },
+    "author": {"login": "dana-okafor", "id": 1002}
+  }
+]

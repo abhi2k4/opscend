@@ -1,0 +1,21 @@
+{
+  "type": "Deployment.failed",
+  "details": {
+    "id": "dep-failed-0003",
+    "source": "GitHub",
+    "status": "FAILED",
+    "branch": "main",
+    "commitHash": "bb083918c9be1579a96112ac2a5779ee95256c89",
+    "commitAuthor": "Priya Nair",
+    "commitMessage": "feat(payments): verify Stripe webhook signatures"
+  },
+  "resource": {
+    "workspace": {"id": "ws-0001", "name": "acme"},
+    "project": {"id": "c1f0a6de-2b7c-4d3e-9f18-6e5a4b3c2d10", "name": "storefront"},
+    "environment": {"id": "env-prod-0001", "name": "production", "isEphemeral": false},
+    "service": {"id": "5d0c7c1e-8f43-4b1e-9a57-2f6d1c0e8a11", "name": "storefront-api"},
+    "deployment": {"id": "dep-failed-0003"}
+  },
+  "severity": "WARNING",
+  "timestamp": "2026-11-18T05:54:49.311Z"
+}
