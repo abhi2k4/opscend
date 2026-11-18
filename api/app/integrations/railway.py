@@ -127,7 +127,7 @@ class RailwayAdapter(HttpAdapter):
         description="Services, deployments, build and runtime logs from Railway's GraphQL API.",
         availability="available",
         capabilities=sorted(capabilities),
-        token_label="Account token",
+        token_label="Account or workspace token",
         token_help_url="https://railway.com/account/tokens",
         config_fields=[
             ConfigField(
@@ -159,13 +159,26 @@ class RailwayAdapter(HttpAdapter):
         if errors := body.get("errors"):
             message = errors[0].get("message", "unknown error")
             if "not authorized" in message.lower():
-                raise ProviderError("Railway rejected the token (use an account token)")
+                raise ProviderError("Railway: this token is not authorized for that query")
             raise ProviderError(f"Railway GraphQL error: {message}")
         return body["data"]
 
     async def validate(self) -> AccountInfo:
-        me = (await self._query(_ME))["me"]
-        return AccountInfo(account_name=me.get("name") or me.get("email") or "railway")
+        try:
+            me = (await self._query(_ME))["me"]
+            return AccountInfo(account_name=me.get("name") or me.get("email") or "railway")
+        except ProviderError:
+            pass
+        # Workspace tokens cannot query `me`, but they can list their projects.
+        try:
+            projects = _nodes((await self._query(_PROJECTS))["projects"])
+        except ProviderError as exc:
+            raise ProviderError(
+                "Railway rejected the token. Create an account or workspace token at "
+                "railway.com/account/tokens; project tokens are not supported."
+            ) from exc
+        label = projects[0]["name"] if len(projects) == 1 else f"{len(projects)} projects"
+        return AccountInfo(account_name=f"workspace · {label}")
 
     async def list_services(self) -> list[ServiceIn]:
         data = await self._query(_PROJECTS)
