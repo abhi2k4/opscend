@@ -1,0 +1,80 @@
+# Opscend, self-hosted:  cp .env.example .env  →  set OPSCEND_SECRET_KEY  →  docker compose up
+# Web UI on http://localhost:3000, API docs on http://localhost:8000/api/docs
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql+asyncpg://opscend:opscend@postgres:5432/opscend
+  REDIS_URL: redis://redis:6379
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: opscend
+      POSTGRES_PASSWORD: opscend
+      POSTGRES_DB: opscend
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opscend -d opscend"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    env_file:
+      - path: .env
+        required: false
+    environment: *api-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # Runs every job: webhook normalization, polling (60s), health checks (60s), investigations.
+  worker:
+    build: ./api
+    command: ["arq", "app.worker.WorkerSettings"]
+    env_file:
+      - path: .env
+        required: false
+    environment: *api-env
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      args:
+        OPSCEND_API_URL: http://api:8000
+    environment:
+      OPSCEND_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
