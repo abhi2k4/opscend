@@ -1,0 +1,115 @@
+"""Job queue abstraction.
+
+With `REDIS_URL` set, jobs go to arq and run in the worker (`app/worker.py`).
+Without it, the very same job functions run inline as asyncio tasks inside the API
+process, including the periodic ones, so Opscend needs no infrastructure to run.
+"""
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol
+
+from app.core.config import get_settings
+
+log = logging.getLogger(__name__)
+
+Job = Callable[..., Awaitable[Any]]
+
+
+class JobQueue(Protocol):
+    kind: str
+
+    async def enqueue(self, name: str, *args: Any) -> None: ...
+
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
+
+
+class InlineQueue:
+    """Runs jobs as background tasks in this process."""
+
+    kind = "inline"
+
+    def __init__(self, jobs: dict[str, Job], periodic: dict[str, int] | None = None) -> None:
+        self._jobs = jobs
+        self._periodic = periodic or {}
+        self._tasks: set[asyncio.Task[Any]] = set()
+        self._loops: list[asyncio.Task[None]] = []
+
+    async def enqueue(self, name: str, *args: Any) -> None:
+        task = asyncio.create_task(self._run(name, *args), name=f"job:{name}")
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _run(self, name: str, *args: Any) -> None:
+        try:
+            await self._jobs[name]({}, *args)
+        except Exception:
+            log.exception("job %s failed", name)
+
+    async def _every(self, name: str, seconds: int) -> None:
+        while True:
+            await asyncio.sleep(seconds)
+            await self._run(name)
+
+    async def start(self) -> None:
+        self._loops = [
+            asyncio.create_task(self._every(name, seconds), name=f"cron:{name}")
+            for name, seconds in self._periodic.items()
+        ]
+
+    async def drain(self) -> None:
+        """Wait until every enqueued job has finished (used by tests and shutdown)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+
+    async def stop(self) -> None:
+        for task in [*self._loops, *self._tasks]:
+            task.cancel()
+        await asyncio.gather(*self._loops, *self._tasks, return_exceptions=True)
+        self._loops.clear()
+
+
+class ArqQueue:
+    """Hands jobs to the arq worker through Redis."""
+
+    kind = "arq"
+
+    def __init__(self, redis_url: str) -> None:
+        self._redis_url = redis_url
+        self._pool: Any = None
+
+    async def start(self) -> None:
+        from arq import create_pool
+        from arq.connections import RedisSettings
+
+        self._pool = await create_pool(RedisSettings.from_dsn(self._redis_url))
+
+    async def enqueue(self, name: str, *args: Any) -> None:
+        await self._pool.enqueue_job(name, *args)
+
+    async def stop(self) -> None:
+        if self._pool is not None:
+            await self._pool.aclose()
+
+
+_queue: JobQueue | None = None
+
+
+def init_queue(jobs: dict[str, Job], periodic: dict[str, int]) -> JobQueue:
+    """Create the process-wide queue for the configured backend."""
+    global _queue
+    settings = get_settings()
+    if settings.redis_url:
+        _queue = ArqQueue(settings.redis_url)
+    else:
+        _queue = InlineQueue(jobs, periodic if settings.background_jobs else None)
+    return _queue
+
+
+def get_queue() -> JobQueue:
+    if _queue is None:
+        raise RuntimeError("job queue is not initialised")
+    return _queue
