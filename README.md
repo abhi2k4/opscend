@@ -37,6 +37,7 @@ Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a faile
 | Deploy detail | `/console/deployments/:id` | Build and runtime logs with level filters, commit diff, Investigate |
 | Investigation | `/console/investigations/:id` | Live trace of every model turn and tool call, next to the cited report |
 | Incidents | `/console/incidents` | Auto-opened on failed deploys and failed health checks |
+| Notifications | `/console/notifications` | Bell in the top bar, full history, email alert status and a test button |
 | Integrations | `/console/integrations` | Paste a token, test it, see the provider's capabilities |
 | Event inspector | `/console/events` | Every raw webhook and poll result, with dedup state |
 | Chaos lab | `/console/chaos` | Five scripted failures pushed through the real ingest pipeline |
@@ -50,6 +51,18 @@ Developer conveniences: `⌘K` command palette, `g` + letter navigation, click-t
 - At most eight tool calls per run, with a token budget. Every step is stored as a span.
 - The report must cite log lines, commits or deploys it actually saw, or say it is inconclusive.
 - Log text is passed as untrusted data. Provider tokens never enter the model context.
+
+## Notifications and email alerts
+
+Opened and resolved incidents, finished investigations and integration errors show up under the bell in the console. To also receive them by email, set the `OPSCEND_SMTP_*` and `OPSCEND_EMAIL_*` variables in `.env` (any SMTP provider works) and restart the API and worker. `OPSCEND_EMAIL_EVENTS` chooses which events are emailed.
+
+To try it without a real mail account, start the bundled test inbox and point Opscend at it:
+
+```bash
+docker compose --profile mail up -d mailpit
+```
+
+Then set `OPSCEND_SMTP_HOST=mailpit`, `OPSCEND_SMTP_PORT=1025`, `OPSCEND_SMTP_SECURITY=none`, plus any from and to address, and read the mail at http://localhost:8025.
 
 ## Architecture
 
