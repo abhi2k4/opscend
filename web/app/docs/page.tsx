@@ -5,6 +5,7 @@ import { CodeBlock } from "@/components/landing/code-block";
 import { LandingFrame } from "@/components/landing/frame";
 import { Nav } from "@/components/landing/nav";
 import { Lines } from "@/components/landing/reveal";
+import { Sherlog } from "@/components/ui/sherlog";
 import { REPO_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -46,7 +47,8 @@ export default function Docs() {
     <LandingFrame>
       <Nav />
       <main className="mx-auto max-w-[1360px] px-5 sm:px-8">
-        <header className="border-b border-line py-12 lg:py-16">
+        <header className="relative border-b border-line py-12 lg:py-16">
+          <Sherlog size={190} className="absolute bottom-6 right-0 hidden lg:block" title="Sherlog, the Opscend mascot" />
           <div className="label mb-6">
             <span className="text-fg">Docs</span>
             <span className="mx-2 text-faint">/</span>

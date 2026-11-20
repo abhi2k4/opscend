@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Button } from "@/components/ui/primitives";
 import { Wordmark } from "@/components/ui/provider";
+import { Sherlog } from "@/components/ui/sherlog";
 import { api, ApiError } from "@/lib/api";
 import type { User } from "@/lib/types";
 
@@ -38,14 +39,17 @@ function LoginForm() {
   return (
     <motion.form
       onSubmit={submit}
-      initial={{ opacity: 0, y: 16, filter: "blur(8px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       className="panel relative w-full max-w-[380px] p-7"
     >
-      <Link href="/">
-        <Wordmark />
-      </Link>
+      <div className="flex items-start justify-between">
+        <Link href="/">
+          <Wordmark />
+        </Link>
+        <Sherlog size={64} className="-mr-2 -mt-3" />
+      </div>
       <h1 className="mt-6 text-[20px] font-medium tracking-tight">Sign in to the console</h1>
       <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
         Single local user. Credentials are <code className="font-mono text-fg">OPSCEND_ADMIN_EMAIL</code> and{" "}
@@ -76,12 +80,6 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="relative grid min-h-dvh place-items-center overflow-hidden p-4">
-      <div aria-hidden className="bg-grid absolute inset-0 [mask-image:radial-gradient(50%_50%_at_50%_50%,black,transparent)]" />
-      <div
-        aria-hidden
-        className="absolute left-1/2 top-1/2 h-[30rem] w-[40rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-        style={{ background: "radial-gradient(closest-side, color-mix(in oklab, var(--accent) 10%, transparent), transparent)" }}
-      />
       <Suspense>
         <LoginForm />
       </Suspense>

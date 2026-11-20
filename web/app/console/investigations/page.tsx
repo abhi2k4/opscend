@@ -1,10 +1,10 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useNow } from "@/components/console/deploys";
 import { PageHeader } from "@/components/console/shell";
 import { ButtonLink, ConfidenceMeter, Dot, Empty, Panel, Skeleton, Tag } from "@/components/ui/primitives";
+import { Sherlog } from "@/components/ui/sherlog";
 import { useApi } from "@/lib/api";
 import { compact, duration, shortSha, timeAgo } from "@/lib/format";
 import type { Investigation } from "@/lib/types";
@@ -22,7 +22,7 @@ export default function InvestigationsPage() {
         {!data && !error && <div className="space-y-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>}
         {error && !data && <Empty title="Could not load investigations">{error.message}</Empty>}
         {data?.length === 0 && (
-          <Empty icon={<Sparkles size={18} />} title="No investigations yet" action={<ButtonLink href="/console/chaos" variant="primary">Open the chaos lab</ButtonLink>}>
+          <Empty icon={<Sherlog size={34} animated={false} />} title="Sherlog has nothing to investigate yet" action={<ButtonLink href="/console/chaos" variant="primary">Open the chaos lab</ButtonLink>}>
             Open a failed deploy and click Investigate, or break one on purpose in the chaos lab.
           </Empty>
         )}

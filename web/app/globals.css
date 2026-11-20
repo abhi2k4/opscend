@@ -287,3 +287,46 @@ button, [role="button"], a, summary {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
+
+/* ── Sherlog, the mascot ──────────────────────────────────────────
+   Calm: a breath, a blink and a slow sway of the glass (the eyes stay put).
+   Alert: one hop, then the glass leans in while the alert lasts. */
+.sherlog .sherlog-body {
+  animation: sherlog-breathe 4.5s ease-in-out infinite;
+  transform-origin: 100px 176px;
+}
+.sherlog .sherlog-eye {
+  animation: sherlog-blink 5.2s ease-in-out infinite;
+}
+.sherlog .sherlog-glass {
+  animation: sherlog-sway 6s ease-in-out infinite;
+  transition: rotate 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.sherlog .sherlog-hop {
+  transform-origin: 100px 190px;
+}
+.sherlog-alert .sherlog-hop {
+  animation: sherlog-hop 0.62s cubic-bezier(0.3, 0.7, 0.3, 1) 1;
+}
+.sherlog-alert .sherlog-glass {
+  rotate: -9deg;
+}
+@keyframes sherlog-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 0.985); }
+}
+@keyframes sherlog-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95.5% { transform: scaleY(0.08); }
+}
+@keyframes sherlog-sway {
+  0%, 100% { transform: rotate(1.5deg); }
+  50% { transform: rotate(-4.5deg); }
+}
+@keyframes sherlog-hop {
+  0% { transform: translateY(0) scale(1, 1); }
+  18% { transform: translateY(0) scale(1.06, 0.92); }
+  48% { transform: translateY(-22px) scale(0.97, 1.04); }
+  78% { transform: translateY(0) scale(1.04, 0.95); }
+  100% { transform: translateY(0) scale(1, 1); }
+}

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { CopyButton } from "@/components/ui/primitives";
 import { ProviderIcon, providerName, Wordmark } from "@/components/ui/provider";
+import { Sherlog } from "@/components/ui/sherlog";
 import { API_DOCS_URL, DOCS_URL, LANDING_ONLY, PRIMARY_CTA, REPO_URL, VERSION } from "@/lib/site";
 import { Lines, Rise, Rule, Section } from "./reveal";
 
@@ -183,7 +184,11 @@ export function Footer() {
   return (
     <footer>
       <Rule />
-      <div className="mx-auto max-w-[1360px] px-5 py-20 sm:px-8 lg:py-28">
+      <div className="relative mx-auto max-w-[1360px] px-5 py-20 sm:px-8 lg:py-28">
+        <Rise delay={0.3} className="absolute bottom-16 right-5 hidden sm:right-8 md:block lg:bottom-24">
+          <Sherlog size={170} />
+          <div className="label mt-1 text-center">Sherlog · on the case</div>
+        </Rise>
         <h2 className="display text-[clamp(52px,11vw,168px)]">
           <Lines lines={["The next red deploy", <span key="e">explains itself<span className="text-[var(--signal)]">.</span></span>]} />
         </h2>

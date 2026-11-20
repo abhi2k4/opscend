@@ -1,6 +1,7 @@
 "use client";
 
 import { LevelBadge } from "@/components/ui/primitives";
+import { Sherlog } from "@/components/ui/sherlog";
 import type { LogLevel } from "@/lib/types";
 import { Rise, Section } from "./reveal";
 
@@ -48,6 +49,15 @@ export function Investigator() {
       title={["It reads the logs.", "Then it shows", "its work."]}
       lead="Every step traced. Every claim cited."
     >
+      <Rise className="mb-10 flex items-center gap-5 border-y border-line py-5">
+        <Sherlog size={92} className="shrink-0" />
+        <div>
+          <div className="label">Meet the investigator</div>
+          <div className="display mt-2 text-[34px] sm:text-[40px]">Sherlog</div>
+          <p className="mt-1.5 max-w-md text-[14px] leading-relaxed text-muted">Reads the logs. Names the commit. Says so when it can&apos;t tell.</p>
+        </div>
+      </Rise>
+
       <div className="grid grid-cols-1 border border-line lg:grid-cols-2">
         {/* log wall */}
         <Rise className="min-w-0 border-b border-line lg:border-b-0 lg:border-r">

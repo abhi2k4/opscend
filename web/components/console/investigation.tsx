@@ -5,6 +5,7 @@ import { ArrowUpRight, Bot, ChevronRight, CircleHelp, FileCheck2, GitCommitHoriz
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ConfidenceMeter, CopyButton, Mono, Spinner, Tag } from "@/components/ui/primitives";
+import { Sherlog } from "@/components/ui/sherlog";
 import { cn, compact, duration, shortSha } from "@/lib/format";
 import type { EvidenceRef, Investigation, InvestigationReport, InvestigationStep } from "@/lib/types";
 
@@ -182,7 +183,7 @@ function EvidenceItem({ e, inv, i }: { e: EvidenceRef; inv: Investigation; i: nu
   return (
     <motion.li initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.07 }}>
       {href ? (
-        <Link href={href} className={cn(cls, "hover:border-[#3a3a3f] hover:bg-raised/50")}>
+        <Link href={href} className={cn(cls, "hover:border-[var(--line-strong)] hover:bg-raised/50")}>
           {body}
         </Link>
       ) : (
@@ -209,14 +210,14 @@ export function ReportView({ inv }: { inv: Investigation }) {
     const last = inv.steps[inv.steps.length - 1];
     return (
       <div className="p-5">
-        <div className="flex items-center gap-2.5 text-[13px] text-muted">
-          <Spinner className="text-accent" />
+        <div className="flex items-center gap-3 text-[13px] text-muted">
+          <Sherlog size={46} className="-my-2 shrink-0" title="Sherlog is investigating" />
           {last ? (
             <span>
               {last.type === "tool" ? "Calling" : "Running"} <span className="font-mono text-fg">{last.name}</span>
             </span>
           ) : (
-            "Starting the investigator"
+            "Sherlog is picking up the trail"
           )}
         </div>
         <div className="mt-6 space-y-3">

@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useAnimationFrame, useInView, useMotionValue, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { Sherlog } from "@/components/ui/sherlog";
 import { cn } from "@/lib/format";
 
 /**
@@ -114,6 +115,11 @@ export function HeroRail({ onFailure }: { onFailure?: () => void }) {
       <div className="absolute inset-y-0" style={{ left: now }}>
         <span className={cn("absolute inset-y-0 left-0 w-px transition-colors duration-500", hit ? "bg-[var(--signal)]" : "bg-fg")} />
         <span className={cn("mono absolute left-2 top-2 text-[10px] uppercase tracking-[0.16em] transition-colors duration-500", hit ? "text-[var(--signal)]" : "text-fg")}>now</span>
+      </div>
+
+      {/* Sherlog keeps watch just past "now" and hops when the failure arrives */}
+      <div className="pointer-events-none absolute bottom-[-5px]" style={{ left: Math.max(0, Math.min(now + 8, width - 96)) }}>
+        <Sherlog size={88} mood={hit ? "alert" : "calm"} animated={!reduce} />
       </div>
 
       {/* readout */}
