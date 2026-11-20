@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { CopyButton } from "@/components/ui/primitives";
 import { ProviderIcon, providerName, Wordmark } from "@/components/ui/provider";
-import { API_DOCS_URL, REPO_URL, VERSION } from "@/lib/site";
+import { API_DOCS_URL, DOCS_URL, LANDING_ONLY, PRIMARY_CTA, REPO_URL, VERSION } from "@/lib/site";
 import { Lines, Rise, Rule, Section } from "./reveal";
 
 // ───────────────────────────── integrations
@@ -170,6 +170,9 @@ export function Quickstart() {
           </ol>
         </Rise>
       </div>
+      <Link href={DOCS_URL} className="mono mt-5 inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.12em] text-muted transition-colors hover:text-fg">
+        Full setup guide <ArrowRight size={13} />
+      </Link>
     </Section>
   );
 }
@@ -185,8 +188,8 @@ export function Footer() {
           <Lines lines={["The next red deploy", <span key="e">explains itself<span className="text-[var(--signal)]">.</span></span>]} />
         </h2>
         <Rise delay={0.2} className="mt-10 flex flex-wrap items-stretch gap-3">
-          <Link href="/console" className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
-            Open the console <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+          <Link href={PRIMARY_CTA.href} className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
+            {PRIMARY_CTA.label} <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
           </Link>
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex h-12 items-center gap-3 border border-line px-6 text-[15px] font-medium transition-colors hover:bg-raised">
             <ProviderIcon provider="github" size={15} /> Source on GitHub
@@ -203,9 +206,10 @@ export function Footer() {
             <span>built in public</span>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
-            <Link href="/console" className="hover:text-fg">Console</Link>
-            <a href={API_DOCS_URL} className="hover:text-fg">API reference</a>
-            <a href="#integrations" className="hover:text-fg">Integrations</a>
+            <Link href={DOCS_URL} className="hover:text-fg">Docs</Link>
+            {!LANDING_ONLY && <Link href="/console" className="hover:text-fg">Console</Link>}
+            {!LANDING_ONLY && <a href={API_DOCS_URL} className="hover:text-fg">API reference</a>}
+            <a href="/#integrations" className="hover:text-fg">Integrations</a>
             <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-fg">GitHub</a>
           </nav>
         </div>

@@ -5,6 +5,7 @@ import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useScroll,
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
 import { CopyButton } from "@/components/ui/primitives";
+import { PRIMARY_CTA } from "@/lib/site";
 import { HeroDemo } from "./hero-demo";
 import { HeroRail } from "./hero-rail";
 import { Lines, Rise } from "./reveal";
@@ -124,8 +125,8 @@ export function Hero() {
               One timeline for every deploy. When one fails, it reads the logs and the diff and names the commit.
             </p>
             <div className="mt-8 flex flex-wrap items-stretch gap-3">
-              <Link href="/console" className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
-                Open the console
+              <Link href={PRIMARY_CTA.href} className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
+                {PRIMARY_CTA.label}
                 <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
               </Link>
               <div className="mono flex h-12 items-center gap-3 border border-line pl-4 pr-2 text-[13px]">

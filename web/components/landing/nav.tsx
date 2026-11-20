@@ -1,14 +1,15 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { Wordmark } from "@/components/ui/provider";
-import { API_DOCS_URL, REPO_URL } from "@/lib/site";
+import { API_DOCS_URL, DOCS_URL, LANDING_ONLY, PRIMARY_CTA, REPO_URL } from "@/lib/site";
 
+// Absolute anchors so the same bar works from /docs.
 const LINKS = [
-  { href: "#how", label: "How it works" },
-  { href: "#investigator", label: "Investigator" },
-  { href: "#integrations", label: "Integrations" },
-  { href: "#quickstart", label: "Quickstart" },
-  { href: API_DOCS_URL, label: "API" },
+  { href: "/#how", label: "How it works" },
+  { href: "/#investigator", label: "Investigator" },
+  { href: "/#integrations", label: "Integrations" },
+  // On the public site the main button already goes to the docs.
+  ...(LANDING_ONLY ? [] : [{ href: DOCS_URL, label: "Docs" }, { href: API_DOCS_URL, label: "API" }]),
 ];
 
 export function Nav() {
@@ -28,8 +29,8 @@ export function Nav() {
             GitHub
           </a>
         </div>
-        <Link href="/console" className="label -mr-5 flex items-center gap-2 bg-fg px-5 !text-bg transition-opacity hover:opacity-85 sm:-mr-8">
-          Console <ArrowUpRight size={13} />
+        <Link href={PRIMARY_CTA.href} className="label -mr-5 flex items-center gap-2 bg-fg px-5 !text-bg transition-opacity hover:opacity-85 sm:-mr-8">
+          {PRIMARY_CTA.short} <ArrowUpRight size={13} />
         </Link>
       </nav>
     </header>
