@@ -7,6 +7,7 @@ from app.core.security import current_user
 from . import (
     demo,
     deployments,
+    docs,
     events,
     integrations,
     investigations,
@@ -17,6 +18,7 @@ from . import (
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(system.router)
+api_router.include_router(docs.router)
 api_router.include_router(events.public_router)
 
 _protected = APIRouter(dependencies=[Depends(current_user)])

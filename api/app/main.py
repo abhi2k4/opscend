@@ -87,7 +87,7 @@ app = FastAPI(
     description="One timeline for Vercel, Railway and GitHub deploys, with a read-only AI "
     "investigator that explains why a deploy broke.",
     lifespan=lifespan,
-    docs_url="/api/docs",
+    docs_url=None,  # served in Opscend's own skin by app/routes/docs.py
     redoc_url=None,
     openapi_url="/api/openapi.json",
 )

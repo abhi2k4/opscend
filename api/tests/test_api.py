@@ -457,3 +457,18 @@ async def test_no_token_or_secret_in_any_response(demo_client):
     integration = (await client.get("/api/integrations")).json()[0]
     assert len(integration["token_hint"]) == 4
     assert "token" not in {key for key in integration if key != "token_hint"}
+
+
+async def test_api_reference_is_served_in_the_opscend_skin(anon_client):
+    page = await anon_client.get("/api/docs")
+    assert page.status_code == 200 and "text/html" in page.headers["content-type"]
+    assert "/api/docs/assets/theme.css" in page.text and "/api/openapi.json" in page.text
+    assert "ops-bar" in page.text and "Opscend API reference" in page.text
+
+    theme = await anon_client.get("/api/docs/assets/theme.css")
+    assert theme.status_code == 200 and theme.headers["content-type"].startswith("text/css")
+    assert (await anon_client.get("/api/docs/assets/sherlog.svg")).status_code == 200
+    # Only the listed assets are served: no path tricks.
+    assert (await anon_client.get("/api/docs/assets/..%2F..%2Fmain.py")).status_code == 404
+    # The page itself is not an API operation.
+    assert "/api/docs" not in (await anon_client.get("/api/openapi.json")).json()["paths"]
