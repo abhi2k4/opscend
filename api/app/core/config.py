@@ -40,12 +40,42 @@ class Settings(BaseSettings):
     ai_max_tool_calls: int = Field(8, alias="OPSCEND_AI_MAX_TOOL_CALLS")
     ai_token_budget: int = Field(40_000, alias="OPSCEND_AI_TOKEN_BUDGET")
 
+    # Email alerts. Leave OPSCEND_SMTP_HOST empty to keep notifications in-app only.
+    smtp_host: str | None = Field(None, alias="OPSCEND_SMTP_HOST")
+    smtp_port: int = Field(587, alias="OPSCEND_SMTP_PORT")
+    smtp_username: str | None = Field(None, alias="OPSCEND_SMTP_USERNAME")
+    smtp_password: str | None = Field(None, alias="OPSCEND_SMTP_PASSWORD")
+    smtp_security: str = Field("starttls", alias="OPSCEND_SMTP_SECURITY")  # starttls | ssl | none
+    email_from: str | None = Field(None, alias="OPSCEND_EMAIL_FROM")
+    email_to: str | None = Field(None, alias="OPSCEND_EMAIL_TO")
+    email_events: str = Field(
+        "incident_opened,investigation_completed,integration_error", alias="OPSCEND_EMAIL_EVENTS"
+    )
+    # Base URL of the console, used for links in emails.
+    public_url: str = Field("http://localhost:3000", alias="OPSCEND_PUBLIC_URL")
+
     poll_interval_seconds: int = Field(60, alias="OPSCEND_POLL_INTERVAL_SECONDS")
     health_interval_seconds: int = Field(60, alias="OPSCEND_HEALTH_INTERVAL_SECONDS")
 
     @property
     def ai_configured(self) -> bool:
         return bool(self.groq_api_key and self.groq_api_key.strip())
+
+    @property
+    def email_recipient(self) -> str | None:
+        return (self.email_to or "").strip() or None
+
+    @property
+    def email_sender(self) -> str | None:
+        return (self.email_from or self.smtp_username or "").strip() or None
+
+    @property
+    def email_configured(self) -> bool:
+        return bool((self.smtp_host or "").strip() and self.email_sender and self.email_recipient)
+
+    @property
+    def email_event_set(self) -> frozenset[str]:
+        return frozenset(part.strip() for part in self.email_events.split(",") if part.strip())
 
     @property
     def database_kind(self) -> str:

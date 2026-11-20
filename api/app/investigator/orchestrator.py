@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.time import utcnow
 from app.models import Deployment, Incident, Investigation, InvestigationStep, Service
+from app.notifications import service as notifications
 from app.schemas import InvestigationReport
 
 from .llm import LLMClient, LLMError, build_llm
@@ -71,6 +72,7 @@ async def run_investigation(investigation_id: str, llm: LLMClient | None = None)
         investigation.report = report.model_dump(mode="json") if report else None
         investigation.error = error
         investigation.finished_at = utcnow()
+        notifications.investigation_finished(session, investigation)
         await session.commit()
 
 

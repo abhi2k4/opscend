@@ -24,6 +24,7 @@ from app.integrations.base import (
 )
 from app.integrations.connect import adapter_for, service_ref
 from app.models import Integration, Service
+from app.notifications import service as notifications
 from app.schemas import Capability
 
 from .normalizer import process_raw_event, reprocess_pending
@@ -56,6 +57,8 @@ async def sync_integration(integration_id: str) -> None:
             await adapter.aclose()
         integration = await session.get(Integration, integration_id)
         if integration is not None:
+            if status == "error" and integration.status != "error":
+                notifications.integration_error(session, integration, detail or "unknown error")
             integration.status, integration.status_detail = status, detail
             if status == "connected":
                 integration.last_synced_at = utcnow()

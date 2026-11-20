@@ -76,5 +76,15 @@ services:
       api:
         condition: service_healthy
 
+  # Local test inbox for email alerts. Start it with:  docker compose --profile mail up -d mailpit
+  # then set OPSCEND_SMTP_HOST=mailpit, OPSCEND_SMTP_PORT=1025, OPSCEND_SMTP_SECURITY=none
+  # and read the mail at http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["mail"]
+    ports:
+      - "8025:8025" # web inbox
+      - "1025:1025" # SMTP, for an API running outside Docker
+
 volumes:
   pgdata:

@@ -3,6 +3,7 @@
 import { Command } from "cmdk";
 import {
   Activity,
+  Bell,
   Blocks,
   BookOpen,
   FlaskConical,
@@ -29,6 +30,7 @@ import { api, useApi } from "@/lib/api";
 import { cn, firstLine, shortSha } from "@/lib/format";
 import { API_DOCS_URL } from "@/lib/site";
 import type { Deployment, Incident, SystemInfo, User } from "@/lib/types";
+import { NotificationBell } from "./notifications";
 import { ToastProvider } from "./toast";
 
 interface NavItem {
@@ -47,6 +49,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
       { href: "/console/timeline", label: "Timeline", icon: Activity, key: "t" },
       { href: "/console/incidents", label: "Incidents", icon: Siren, key: "i" },
       { href: "/console/investigations", label: "Investigations", icon: Sparkles, key: "n" },
+      { href: "/console/notifications", label: "Notifications", icon: Bell, key: "b" },
     ],
   },
   {
@@ -150,6 +153,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               <Kbd>⌘</Kbd>
               <Kbd>K</Kbd>
             </button>
+            <NotificationBell />
             <a href={API_DOCS_URL} target="_blank" rel="noreferrer" className="hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] text-muted hover:bg-raised hover:text-fg sm:inline-flex">
               <BookOpen size={13} /> API
             </a>

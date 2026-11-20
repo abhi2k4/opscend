@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.incidents.health import run_health_checks
 from app.ingest import normalizer, poller
 from app.investigator.orchestrator import run_investigation
+from app.notifications.email import deliver_pending
 
 
 async def process_event(ctx: dict[str, Any], event_id: str) -> None:
@@ -31,9 +32,20 @@ async def health_checks(ctx: dict[str, Any]) -> None:
     await run_health_checks()
 
 
+async def deliver_notifications(ctx: dict[str, Any]) -> None:
+    await deliver_pending()
+
+
 JOBS = {
     job.__name__: job
-    for job in (process_event, investigate, sync_integration, reconcile, health_checks)
+    for job in (
+        process_event,
+        investigate,
+        sync_integration,
+        reconcile,
+        health_checks,
+        deliver_notifications,
+    )
 }
 
 
@@ -43,4 +55,5 @@ def periodic_jobs() -> dict[str, int]:
     return {
         "reconcile": max(30, settings.poll_interval_seconds),
         "health_checks": max(30, settings.health_interval_seconds),
+        "deliver_notifications": 15,
     }

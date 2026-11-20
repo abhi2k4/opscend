@@ -259,3 +259,41 @@ export interface DemoScenario {
   title: string;
   description: string;
 }
+
+// ───────────────────────────── notifications
+
+export type NotificationKind = "incident_opened" | "incident_resolved" | "investigation_completed" | "investigation_failed" | "integration_error";
+
+export interface Notification {
+  id: string;
+  kind: NotificationKind;
+  severity: "info" | "success" | "warning" | "critical";
+  title: string;
+  body: string | null;
+  /** Console path to open, e.g. "/console/investigations/<id>". */
+  link: string | null;
+  created_at: string;
+  read_at: string | null;
+  /** "skipped" means this event is not emailed (or SMTP is not configured). */
+  email_status: "pending" | "sent" | "skipped" | "failed";
+  email_error: string | null;
+}
+
+export interface NotificationList {
+  unread: number;
+  items: Notification[];
+}
+
+export interface NotificationSettings {
+  kinds: NotificationKind[];
+  email: {
+    configured: boolean;
+    host: string | null;
+    port: number;
+    security: string;
+    from_address: string | null;
+    to_address: string | null;
+    /** Kinds that are sent by email. */
+    events: NotificationKind[];
+  };
+}

@@ -4,13 +4,22 @@ from fastapi import APIRouter, Depends
 
 from app.core.security import current_user
 
-from . import demo, deployments, events, integrations, investigations, overview, system
+from . import (
+    demo,
+    deployments,
+    events,
+    integrations,
+    investigations,
+    notifications,
+    overview,
+    system,
+)
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(system.router)
 api_router.include_router(events.public_router)
 
 _protected = APIRouter(dependencies=[Depends(current_user)])
-for module in (overview, deployments, investigations, integrations, events, demo):
+for module in (overview, deployments, investigations, integrations, notifications, events, demo):
     _protected.include_router(module.router)
 api_router.include_router(_protected)
