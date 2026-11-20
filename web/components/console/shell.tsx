@@ -146,7 +146,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             <Crumbs pathname={pathname} />
             <button
               onClick={() => setPaletteOpen(true)}
-              className="ml-auto flex h-8 w-full max-w-[280px] items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-[12.5px] text-muted transition-colors hover:border-[#3a3a3f] hover:text-fg"
+              className="ml-auto flex h-8 w-full max-w-[280px] items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-[12.5px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-fg"
             >
               <Search size={13} />
               <span className="flex-1 truncate text-left">Search or jump to…</span>

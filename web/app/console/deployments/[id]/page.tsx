@@ -74,7 +74,7 @@ function DeployDetail() {
         </div>
         <div className="flex items-center gap-2">
           {d.url && (
-            <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-raised px-3 text-[13px] hover:border-[#3a3a3f]">
+            <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-raised px-3 text-[13px] hover:border-[var(--line-strong)]">
               {providerName(d.provider)} <ExternalLink size={12} />
             </a>
           )}

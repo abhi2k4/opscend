@@ -1,30 +1,36 @@
 /*
- * Opscend design tokens. Dark-first; borders over shadows; mono for data.
+ * Opscend design tokens: one matte palette for the landing page and the console.
+ * Warm charcoal, bone ink, borders over shadows, mono for data.
  * Change a value here and it flows through Tailwind (see app/globals.css).
  */
 :root {
-  --bg: #020202;
-  --surface: #0b0b0c;
-  --raised: #141416;
-  --line: #232326;
-  --line-soft: #18181a;
+  --bg: #0f0f0e;
+  --surface: #141413;
+  --raised: #1b1b19;
+  --line: #2b2a27;
+  --line-soft: #201f1d;
+  /* Hover states one step up from --line / --raised. */
+  --line-strong: #45433d;
+  --raised-hover: #22211e;
 
-  --fg: #ededed;
-  --muted: #8a8a8f;
-  --faint: #55555b;
+  --fg: #e6e1d6;
+  --muted: #8f8a7e;
+  --faint: #5c5850;
 
-  /* One accent for anything interactive. */
-  --accent: #c4f042;
-  --accent-ink: #0c1200;
+  /* Interactive = ink. There is no neon accent. */
+  --accent: #e6e1d6;
+  --accent-ink: #0f0f0e;
+  /* The one chromatic colour, reserved for failure and for what needs attention. */
+  --signal: #d4522a;
 
   /* Status */
-  --ok: #3dd68c;
-  --warn: #f5b544;
-  --err: #f2555a;
-  --info: #5b9dff;
+  --ok: #8aa583;
+  --warn: #c8a24a;
+  --err: #d4522a;
+  --info: #8296a8;
 
   /* Provider identity (used for timeline rails and icons only). */
-  --vercel: #f5f5f5;
-  --railway: #b48cff;
-  --github: #8fa3bf;
+  --vercel: #e6e1d6;
+  --railway: #a195b8;
+  --github: #8f97a1;
 }

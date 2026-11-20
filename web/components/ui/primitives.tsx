@@ -12,8 +12,8 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 const buttonBase =
   "inline-flex items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap transition-[background,border-color,color,transform,opacity] duration-150 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none select-none";
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-ink hover:brightness-110",
-  secondary: "border border-line bg-raised text-fg hover:border-[#3a3a3f] hover:bg-[#1a1a1d]",
+  primary: "bg-accent text-accent-ink hover:opacity-85",
+  secondary: "border border-line bg-raised text-fg hover:border-[var(--line-strong)] hover:bg-[var(--raised-hover)]",
   ghost: "text-muted hover:text-fg hover:bg-raised",
   danger: "border border-err/40 bg-err/10 text-err hover:bg-err/20",
 };
