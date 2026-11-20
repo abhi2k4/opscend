@@ -1,17 +1,23 @@
 """In-app notifications and the SMTP outbox."""
 
+import asyncio
 import smtplib
+from datetime import timedelta
 
+import httpx
 import pytest
+import respx
 from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.db import session_scope
+from app.core.time import utcnow
 from app.incidents import rules
-from app.models import Notification
+from app.ingest import poller
+from app.models import Integration, Notification
 from app.notifications import email as email_module
 from app.notifications.email import EmailError, build_message, deliver_pending, send_email
-from app.notifications.service import notify
+from app.notifications.service import SYNC_FAILURES_TO_ALERT, notify, notify_once
 
 from .conftest import make_deployment, make_service
 
@@ -175,3 +181,71 @@ async def test_send_email_needs_config_and_escapes_html(env):
     message = build_message(get_settings(), "<b>deploy</b>", "log <script>", None)
     html = message.get_body(("html",)).get_content()
     assert "<script>" not in html and "&lt;b&gt;deploy&lt;/b&gt;" in html
+
+
+async def test_notify_once_stays_quiet_about_an_ongoing_problem(client):
+    async def raise_it() -> bool:
+        async with session_scope() as session:
+            created = await notify_once(session, "integration_error:abc", "integration_error", "x")
+            await session.commit()
+            return created is not None
+
+    assert await raise_it() is True
+    assert await raise_it() is False  # still unread
+
+    await client.post("/api/notifications/read-all")
+    assert await raise_it() is False  # read, but raised moments ago
+
+    async with session_scope() as session:  # ...and long enough ago to be news again
+        (row,) = (await session.scalars(select(Notification))).all()
+        row.created_at = utcnow() - timedelta(hours=7)
+        await session.commit()
+    assert await raise_it() is True
+
+
+@respx.mock
+async def test_integration_alerts_once_per_failure_streak(client):
+    async with session_scope() as session:
+        service = await make_service(session)
+        integration_id = service.integration_id
+    vercel = respx.route(host="api.vercel.com")
+    vercel.mock(side_effect=httpx.ConnectError("network is down"))
+
+    async def errors() -> int:
+        return len([n for n in await _notifications() if n.kind == "integration_error"])
+
+    # One or two failed polls are a blip: the status shows it, nobody is alerted.
+    for _ in range(SYNC_FAILURES_TO_ALERT - 1):
+        await poller.sync_integration(integration_id)
+    async with session_scope() as session:
+        assert (await session.get(Integration, integration_id)).status == "error"
+    assert await errors() == 0
+
+    # The streak is an alert, exactly once however long it lasts.
+    for _ in range(4):
+        await poller.sync_integration(integration_id)
+    assert await errors() == 1
+
+    # Recovery clears the streak; a new outage soon after does not alert again.
+    vercel.mock(return_value=httpx.Response(200, json={"projects": [], "deployments": []}))
+    await poller.sync_integration(integration_id)
+    async with session_scope() as session:
+        row = await session.get(Integration, integration_id)
+        assert row.status == "connected" and row.sync_failures == 0
+    vercel.mock(side_effect=httpx.ConnectError("down again"))
+    for _ in range(SYNC_FAILURES_TO_ALERT + 1):
+        await poller.sync_integration(integration_id)
+    assert await errors() == 1
+
+
+async def test_reconcile_never_overlaps_itself(client, monkeypatch):
+    runs = 0
+
+    async def slow() -> None:
+        nonlocal runs
+        runs += 1
+        await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(poller, "_reconcile", slow)
+    await asyncio.gather(poller.reconcile(), poller.reconcile(), poller.reconcile())
+    assert runs == 1

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, String, Text
+from sqlalchemy import JSON, Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utcnow
@@ -34,6 +34,8 @@ class Integration(Base):
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     status_detail: Mapped[str | None] = mapped_column(Text)
+    # Consecutive failed syncs. One blip is not worth an alert; a streak is.
+    sync_failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
     last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

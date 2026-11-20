@@ -17,7 +17,7 @@ from app.core import crypto, db
 from app.core import queue as queue_module
 from app.core.config import get_settings
 from app.core.time import utcnow
-from app.ingest import normalizer
+from app.ingest import normalizer, poller
 from app.models import Deployment, Integration, Service
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -58,6 +58,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(key, value)
     _clear_caches()
     normalizer._lock = asyncio.Lock()
+    poller._reconciling = asyncio.Lock()
     yield monkeypatch
     _clear_caches()
 

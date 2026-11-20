@@ -71,6 +71,8 @@ class Notification(Base):
     email_status: Mapped[str] = mapped_column(String(16), default="skipped", index=True)
     email_error: Mapped[str | None] = mapped_column(Text)
     email_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    # Same key = same ongoing problem; see notify_once in notifications/service.py.
+    dedup_key: Mapped[str | None] = mapped_column(String(255), index=True)
 
 
 class Incident(Base):

@@ -5,6 +5,7 @@ becomes a `raw_event` (source "poll") and is then normalized, so a state already
 seen costs one dedup lookup and nothing else.
 """
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -57,16 +58,34 @@ async def sync_integration(integration_id: str) -> None:
             await adapter.aclose()
         integration = await session.get(Integration, integration_id)
         if integration is not None:
-            if status == "error" and integration.status != "error":
-                notifications.integration_error(session, integration, detail or "unknown error")
-            integration.status, integration.status_detail = status, detail
-            if status == "connected":
+            if status == "error":
+                integration.sync_failures += 1
+                # Alert on a streak, not on a single network blip, and only once per streak.
+                if integration.sync_failures == notifications.SYNC_FAILURES_TO_ALERT:
+                    await notifications.integration_error(
+                        session, integration, detail or "unknown error"
+                    )
+            else:
+                integration.sync_failures = 0
                 integration.last_synced_at = utcnow()
+            integration.status, integration.status_detail = status, detail
             await session.commit()
+
+
+_reconciling = asyncio.Lock()
 
 
 async def reconcile() -> None:
     """Job (cron): replay events whose job was lost, then sync every real integration."""
+    if _reconciling.locked():
+        # The previous run is still going (a slow provider): overlapping runs would
+        # double every poll and every alert, so this tick is skipped.
+        return
+    async with _reconciling:
+        await _reconcile()
+
+
+async def _reconcile() -> None:
     await reprocess_pending()
     async with session_scope() as session:
         ids = (
