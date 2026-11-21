@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app import schemas
 from app.core import crypto
+from app.core.config import get_settings
 from app.core.db import session_scope
 from app.incidents.health import run_health_checks
 from app.main import app
@@ -475,6 +476,7 @@ async def test_api_reference_is_served_in_the_opscend_skin(anon_client):
     # The page itself is not an API operation.
     assert "/api/docs" not in (await anon_client.get("/api/openapi.json")).json()["paths"]
 
+
 async def test_health_url_can_be_set_turned_off_and_reset(client):
     async with session_scope() as session:
         service = await make_service(session, health_url="https://storefront.acme.dev")
@@ -497,3 +499,21 @@ async def test_health_url_can_be_set_turned_off_and_reset(client):
     assert (await client.patch(url, json={"health_url": None})).json()["health_url"] is None
     async with session_scope() as session:
         assert (await session.get(Service, service_id)).health_url is None
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("postgres://u:p@host:5432/db", "postgresql+asyncpg://u:p@host:5432/db"),
+        (
+            "postgresql://u:p@host/db?sslmode=require",
+            "postgresql+asyncpg://u:p@host/db?ssl=require",
+        ),
+        ("postgresql+asyncpg://u:p@host/db", "postgresql+asyncpg://u:p@host/db"),
+        ("sqlite+aiosqlite:///./x.db", "sqlite+aiosqlite:///./x.db"),
+    ],
+)
+def test_hosted_postgres_urls_get_the_async_driver(env, given, expected):
+    env.setenv("DATABASE_URL", given)
+    get_settings.cache_clear()
+    assert get_settings().database_url == expected

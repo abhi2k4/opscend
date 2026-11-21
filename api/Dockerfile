@@ -17,4 +17,5 @@ USER opscend
 
 EXPOSE 8000
 # Migrations run on startup (OPSCEND_AUTO_MIGRATE=1). The worker overrides this command.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Hosts such as Railway choose the port and pass it as $PORT; locally it stays 8000.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
