@@ -15,9 +15,13 @@ import { Lines, Rise, Rule, Section } from "./reveal";
 const PROVIDERS = [
   { id: "vercel", via: "REST", caps: "deploys · build logs · webhooks" },
   { id: "railway", via: "GraphQL", caps: "deploys · build + runtime logs" },
+  { id: "render", via: "REST", caps: "deploys · build + runtime logs" },
+  { id: "fly", via: "GraphQL", caps: "releases · runtime logs" },
+  { id: "netlify", via: "REST", caps: "deploys · webhooks" },
+  { id: "cloudflare", via: "REST", caps: "pages deploys · build logs" },
+  { id: "aws", via: "SigV4", caps: "amplify builds · ecs rollouts" },
   { id: "github", via: "REST", caps: "commits · diffs · webhooks" },
 ] as const;
-const PLANNED = ["render", "fly", "netlify", "cloudflare", "aws"] as const;
 
 export function Integrations() {
   return (
@@ -25,7 +29,7 @@ export function Integrations() {
       id="integrations"
       no="03"
       label="Integrations"
-      title={["Three today.", "One file each."]}
+      title={["Eight today.", "One file each."]}
       lead="One contract. One file per provider."
     >
       <div className="border-t border-line">
@@ -43,18 +47,6 @@ export function Integrations() {
             </div>
           </Rise>
         ))}
-        <div className="grid grid-cols-[32px_1fr_auto] items-center gap-x-4 border-b border-line py-4 text-faint">
-          <span />
-          <span className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[15px]">
-            {PLANNED.map((id) => (
-              <span key={id} className="flex items-center gap-2">
-                <ProviderIcon provider={id} size={13} className="opacity-50 grayscale" />
-                {providerName(id)}
-              </span>
-            ))}
-          </span>
-          <span className="mono text-right text-[11px] uppercase tracking-[0.12em]">planned</span>
-        </div>
         <a
           href={`${REPO_URL}/blob/main/docs/adding-a-provider.md`}
           target="_blank"

@@ -1,6 +1,6 @@
 # Opscend
 
-**Know why the deploy broke.** Opscend is an open-source, self-hosted tool that puts every Vercel deploy, Railway deploy and GitHub commit on one timeline, opens an incident when something fails, and runs a read-only AI investigator that reads the logs and the diff and names the likely cause — citing its evidence.
+**Know why the deploy broke.** Opscend is an open-source, self-hosted tool that puts every deploy (Vercel, Railway, Render, Fly.io, Netlify, Cloudflare Pages, AWS) and every GitHub commit on one timeline, opens an incident when something fails, and runs a read-only AI investigator that reads the logs and the diff and names the likely cause — citing its evidence.
 
 > Single user, self-hosted, bring your own LLM key. The investigator has no write tools.
 
@@ -95,6 +95,21 @@ docs/  plan, provider guide
 
 `web/lib/types.ts` is the API contract; `api/app/schemas.py` mirrors it.
 
+## Providers
+
+| Provider | Connect with | Deploys | Logs | Webhooks |
+| --- | --- | --- | --- | --- |
+| Vercel | Access token | yes | build | yes |
+| Railway | Account or workspace token | yes | build, runtime | yes |
+| Render | API key | yes | build, runtime (last 6 hours of the service) | polled |
+| Fly.io | Access token (`fly tokens create readonly`) | releases | runtime (the app's recent buffer) | polled |
+| Netlify | Personal access token | yes | none (not in Netlify's public API) | yes |
+| Cloudflare | API token with Pages: Read, plus account ID | Pages | build | polled |
+| AWS | Read-only IAM access key, plus region | Amplify builds, ECS rollouts | Amplify build | polled |
+| GitHub | Personal access token | commits and diffs | n/a | yes |
+
+"Polled" means Opscend checks every 60 seconds instead of receiving a webhook. For AWS, the IAM user needs `amplify:List*`, `amplify:GetJob`, `ecs:ListClusters`, `ecs:ListServices` and `ecs:DescribeServices`; temporary (session-token) credentials are not supported.
+
 ## Adding a provider
 
 A provider is one adapter file plus one registry line. See [docs/adding-a-provider.md](docs/adding-a-provider.md). The console reads the capability manifest from `/api/integrations/catalog`, so a new adapter shows up in Integrations without frontend changes.
@@ -109,4 +124,4 @@ make check     # everything CI runs
 
 ## Status
 
-v0.1. Vercel, Railway and GitHub adapters are written against the providers' public APIs and tested with recorded-style fixtures. Not in scope: organizations, RBAC, alerting, any write action.
+v0.1. Adapters are written against the providers' public APIs and tested with recorded-style fixtures. Vercel, Railway and GitHub have been run against real accounts; Render, Fly.io, Netlify, Cloudflare and AWS have not yet. Not in scope: organizations, RBAC, alerting, any write action.

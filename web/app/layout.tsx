@@ -6,7 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "Opscend — know why the deploy broke", template: "%s · Opscend" },
   description:
-    "Open-source, self-hosted deploy investigator. One timeline for Vercel, Railway and GitHub, and a read-only AI that names the commit that broke it — with evidence.",
+    "Open-source, self-hosted deploy investigator. One timeline for Vercel, Railway, Render, Fly.io, Netlify, Cloudflare, AWS and GitHub, and a read-only AI that names the commit that broke it — with evidence.",
 };
 
 export const viewport: Viewport = {

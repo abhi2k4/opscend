@@ -27,6 +27,11 @@ const STEPS = [
 const PROVIDERS = [
   { name: "Vercel", token: "Access token", href: "https://vercel.com/account/settings/tokens", gives: "Projects, deploys, build logs" },
   { name: "Railway", token: "Account or workspace token", href: "https://railway.com/account/tokens", gives: "Services, deploys, build and runtime logs" },
+  { name: "Render", token: "API key", href: "https://dashboard.render.com/u/settings#api-keys", gives: "Services, deploys, build and runtime logs" },
+  { name: "Fly.io", token: "Read-only access token", href: "https://fly.io/docs/security/tokens/", gives: "Apps, releases, recent runtime logs" },
+  { name: "Netlify", token: "Personal access token", href: "https://app.netlify.com/user/applications#personal-access-tokens", gives: "Sites and deploys" },
+  { name: "Cloudflare", token: "API token with Pages: Read, plus account ID", href: "https://dash.cloudflare.com/profile/api-tokens", gives: "Pages projects, deploys, build logs" },
+  { name: "AWS", token: "Read-only IAM access key, plus region", href: "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html", gives: "Amplify builds and logs, ECS rollouts" },
   { name: "GitHub", token: "Token with read access to repo contents", href: "https://github.com/settings/personal-access-tokens", gives: "Commits and diffs" },
 ];
 

@@ -10,7 +10,7 @@ import { HeroRail } from "./hero-rail";
 import { Lines, Rise } from "./reveal";
 
 const FACTS: [string, string][] = [
-  ["Watches", "Vercel · Railway · GitHub"],
+  ["Watches", "7 deploy platforms + GitHub"],
   ["Writes", "Nothing. Read-only"],
   ["Runs on", "Your machine"],
 ];

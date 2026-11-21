@@ -1,6 +1,6 @@
 # Opscend
 
-Self-hosted tool that unifies Vercel, Railway and GitHub deploys on one timeline and runs a read-only AI investigator.
+Self-hosted tool that unifies deploys from Vercel, Railway, Render, Fly.io, Netlify, Cloudflare Pages and AWS (Amplify, ECS) with GitHub commits on one timeline and runs a read-only AI investigator.
 The original plan is `docs/Opscend — 2-Week Development Doc.pdf`.
 
 ## Layout
