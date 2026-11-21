@@ -16,7 +16,7 @@ from app.core.security import hash_password, verify_password
 from app.core.time import utcnow
 from app.demo.seed import demo_exists, seed_demo
 from app.jobs import JOBS, periodic_jobs
-from app.models import Investigation, User
+from app.models import ChatMessage, Investigation, User
 from app.routes import api_router
 
 log = logging.getLogger(__name__)
@@ -46,6 +46,15 @@ async def fail_orphaned_investigations() -> None:
             .values(
                 status="failed",
                 error="Interrupted by an API restart. Run it again.",
+                finished_at=utcnow(),
+            )
+        )
+        await session.execute(
+            update(ChatMessage)
+            .where(ChatMessage.status.in_(("pending", "running")))
+            .values(
+                status="failed",
+                error="Interrupted by an API restart. Ask again.",
                 finished_at=utcnow(),
             )
         )

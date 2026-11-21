@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -38,6 +38,7 @@ class RawEvent(Base):
 
 class HealthCheck(Base):
     __tablename__ = "health_check"
+    __table_args__ = (Index("ix_health_check_service_checked", "service_id", "checked_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     service_id: Mapped[str] = mapped_column(

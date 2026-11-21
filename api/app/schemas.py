@@ -327,6 +327,57 @@ class Investigation(Schema):
     steps: list[InvestigationStep]
 
 
+# ───────────────────────────── ask opscend (chat)
+
+
+class ChatCitation(Schema):
+    type: Literal["deploy", "log", "commit", "incident", "service"]
+    ref: str
+    label: str
+    detail: str | None = None
+    deployment_id: str | None = None
+    url: str | None = None
+
+
+class ChatStep(Schema):
+    name: str
+    input: dict[str, Any] | None
+    status: Literal["running", "ok", "error"]
+    summary: str | None
+    duration_ms: int | None
+
+
+class ChatMessage(Schema):
+    id: str
+    index: int
+    role: Literal["user", "assistant"]
+    content: str
+    status: Literal["pending", "running", "done", "failed"]
+    error: str | None
+    citations: list[ChatCitation]
+    steps: list[ChatStep]
+    model: str | None
+    tokens: int
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class ChatSessionSummary(Schema):
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatSession(ChatSessionSummary):
+    tokens_used: int
+    messages: list[ChatMessage]
+
+
+class ChatAskRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+
+
 # ───────────────────────────── developer console
 
 

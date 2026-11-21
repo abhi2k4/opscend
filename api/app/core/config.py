@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     poll_interval_seconds: int = Field(60, alias="OPSCEND_POLL_INTERVAL_SECONDS")
     health_interval_seconds: int = Field(60, alias="OPSCEND_HEALTH_INTERVAL_SECONDS")
+    # Stored log lines and health checks older than this are deleted hourly; 0 keeps everything.
+    retention_days: int = Field(30, alias="OPSCEND_RETENTION_DAYS")
 
     @property
     def ai_configured(self) -> bool:

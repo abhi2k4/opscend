@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import httpx
 
 from app.core.config import get_settings
+
+log = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 # Per-minute limits clear within a minute; anything longer is a daily cap, so fail fast.
@@ -97,6 +100,7 @@ class OpenAICompatibleClient:
                 wait = _retry_after(response)
                 if attempt == self._rate_limit_retries or wait > MAX_RATE_LIMIT_WAIT:
                     raise LLMError(f"model API rate limit reached: {_error_message(response)}")
+                log.info("model API rate limited; retrying in %.1fs", wait)
                 await asyncio.sleep(wait)
             raise LLMError("model API rate limit reached")
         finally:

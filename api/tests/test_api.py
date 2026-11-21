@@ -439,6 +439,7 @@ async def test_no_token_or_secret_in_any_response(demo_client):
         "investigation_id": (await client.get("/api/investigations")).json()[0]["id"],
         "integration_id": (await client.get("/api/integrations")).json()[0]["id"],
         "service_id": (await client.get("/api/services")).json()[0]["id"],
+        "session_id": "no-such-chat",
     }
     bodies = []
     for method, path in api_routes():
