@@ -16,6 +16,11 @@ ADAPTER_MODULES = (
     "app.integrations.vercel",
     "app.integrations.railway",
     "app.integrations.github",
+    "app.integrations.render",
+    "app.integrations.fly",
+    "app.integrations.netlify",
+    "app.integrations.cloudflare",
+    "app.integrations.aws",
 )
 
 _adapters: dict[str, type[ProviderAdapter]] = {}
@@ -68,48 +73,8 @@ def _planned(provider: str, name: str, description: str, *caps: Capability) -> P
     )
 
 
-_DEPLOY = (Capability.LIST_SERVICES, Capability.LIST_DEPLOYS)
-
-PLANNED: tuple[ProviderManifest, ...] = (
-    _planned(
-        "render",
-        "Render",
-        "Web services and deploys from the Render API.",
-        *_DEPLOY,
-        Capability.BUILD_LOGS,
-        Capability.RUNTIME_LOGS,
-        Capability.WEBHOOKS,
-    ),
-    _planned(
-        "fly",
-        "Fly.io",
-        "Apps, releases and machine logs from Fly.io.",
-        *_DEPLOY,
-        Capability.RUNTIME_LOGS,
-    ),
-    _planned(
-        "netlify",
-        "Netlify",
-        "Sites, deploys and build logs from Netlify.",
-        *_DEPLOY,
-        Capability.BUILD_LOGS,
-        Capability.WEBHOOKS,
-    ),
-    _planned(
-        "cloudflare",
-        "Cloudflare",
-        "Pages and Workers deployments from Cloudflare.",
-        *_DEPLOY,
-        Capability.BUILD_LOGS,
-    ),
-    _planned(
-        "aws",
-        "AWS",
-        "ECS, Lambda and Amplify deployments with CloudWatch logs.",
-        *_DEPLOY,
-        Capability.RUNTIME_LOGS,
-    ),
-)
+# Nothing is on the roadmap right now; add a `_planned(...)` entry here to list one.
+PLANNED: tuple[ProviderManifest, ...] = ()
 
 
 def catalog() -> list[ProviderManifest]:

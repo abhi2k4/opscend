@@ -140,13 +140,7 @@ async def test_demo_seed_matches_the_contract(demo_client):
         schemas.ProviderManifest.model_validate(item)
         for item in (await client.get("/api/integrations/catalog")).json()
     ]
-    assert [m.provider for m in catalog if m.availability == "planned"] == [
-        "render",
-        "fly",
-        "netlify",
-        "cloudflare",
-        "aws",
-    ]
+    assert len(catalog) == 8 and all(m.availability == "available" for m in catalog)
 
     incidents = [
         schemas.Incident.model_validate(i) for i in (await client.get("/api/incidents")).json()

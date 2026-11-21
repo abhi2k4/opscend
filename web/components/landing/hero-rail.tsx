@@ -7,8 +7,8 @@ import { cn } from "@/lib/format";
 
 /**
  * The product in one moving line: deploys and commits travel along a rail,
- * and when the failed one crosses "now" the readout (and the hero stamp) react.
- * Sample data. One rAF loop drives the whole strip.
+ * and when the failed one crosses "now" the readout reacts.
+ * An illustration, not data. One rAF loop drives the whole strip.
  */
 
 type Kind = "ready" | "commit" | "failed";
@@ -21,20 +21,20 @@ interface Mark {
 const PERIOD = 1560;
 const SPEED = 46; // px per second
 const MARKS: Mark[] = [
-  { at: 60, kind: "commit", label: "a1b9e04" },
-  { at: 170, kind: "ready", label: "storefront-web · 31s" },
-  { at: 400, kind: "commit", label: "e77c0d2" },
-  { at: 500, kind: "ready", label: "worker · 44s" },
-  { at: 730, kind: "ready", label: "storefront-web · 29s" },
-  { at: 960, kind: "commit", label: "7c3f2de" },
-  { at: 1070, kind: "failed", label: "storefront-api · exit 1" },
-  { at: 1330, kind: "ready", label: "storefront-api · 52s" },
+  { at: 60, kind: "commit", label: "commit" },
+  { at: 170, kind: "ready", label: "vercel · ready" },
+  { at: 400, kind: "commit", label: "commit" },
+  { at: 500, kind: "ready", label: "railway · ready" },
+  { at: 730, kind: "ready", label: "vercel · ready" },
+  { at: 960, kind: "commit", label: "commit" },
+  { at: 1070, kind: "failed", label: "railway · failed" },
+  { at: 1330, kind: "ready", label: "railway · ready" },
 ];
 const FAILED_AT = MARKS.find((m) => m.kind === "failed")!.at;
 /** How long after crossing "now" the failure stays on the readout, in px of travel. */
 const HOLD = 150;
 
-export function HeroRail({ onFailure }: { onFailure?: () => void }) {
+export function HeroRail() {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref);
@@ -64,7 +64,6 @@ export function HeroRail({ onFailure }: { onFailure?: () => void }) {
     if (isHit !== hitRef.current) {
       hitRef.current = isHit;
       setHit(isHit);
-      if (isHit) onFailure?.();
     }
   });
 
@@ -119,7 +118,7 @@ export function HeroRail({ onFailure }: { onFailure?: () => void }) {
 
       {/* Sherlog keeps watch just past "now" and hops when the failure arrives */}
       <div className="pointer-events-none absolute bottom-[-5px]" style={{ left: Math.max(0, Math.min(now + 8, width - 96)) }}>
-        <Sherlog size={88} mood={hit ? "alert" : "calm"} animated={!reduce} />
+        <Sherlog size={88} mood={hit ? "alert" : "calm"} />
       </div>
 
       {/* readout */}
@@ -133,7 +132,7 @@ export function HeroRail({ onFailure }: { onFailure?: () => void }) {
             transition={{ duration: 0.3, ease: [0.2, 0.7, 0.2, 1] }}
             className={hit ? "text-[var(--signal)]" : "text-muted"}
           >
-            {hit ? "failed · 7c3f2de · incident opened" : "all services ready"}
+            {hit ? "deploy failed · incident opened" : "all deploys ready"}
           </motion.span>
         </AnimatePresence>
       </div>

@@ -243,10 +243,16 @@ async def test_connecting_with_a_bad_token_fails_cleanly(client):
     assert SECRET_TOKEN not in response.text
     assert await count(Integration) == 0
 
-    planned = await client.post(
-        "/api/integrations", json={"provider": "render", "token": "x", "config": {}}
+    unknown = await client.post(
+        "/api/integrations", json={"provider": "heroku", "token": "x", "config": {}}
     )
-    assert planned.status_code == 400
+    assert unknown.status_code == 400
+
+    # A required field left empty is refused before any provider call is made.
+    incomplete = await client.post(
+        "/api/integrations", json={"provider": "cloudflare", "token": "x", "config": {}}
+    )
+    assert incomplete.status_code == 422
 
 
 @respx.mock

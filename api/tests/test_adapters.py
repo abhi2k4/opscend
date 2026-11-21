@@ -38,17 +38,17 @@ def raw(name: str) -> bytes:
 # ───────────────────────────── registry
 
 
-def test_registry_lists_real_adapters_then_the_roadmap():
+ALL_PROVIDERS = ["vercel", "railway", "github", "render", "fly", "netlify", "cloudflare", "aws"]
+
+
+def test_registry_lists_every_adapter_in_order():
     catalog = registry.catalog()
-    by_provider = {manifest.provider: manifest for manifest in catalog}
-    assert [m.provider for m in catalog[:3]] == ["vercel", "railway", "github"]
-    assert all(by_provider[p].availability == "available" for p in ("vercel", "railway", "github"))
-    for planned in ("render", "fly", "netlify", "cloudflare", "aws"):
-        assert by_provider[planned].availability == "planned"
-        assert registry.get_adapter_class(planned) is None
+    assert [m.provider for m in catalog] == ALL_PROVIDERS
+    assert all(m.availability == "available" for m in catalog)
+    assert registry.get_adapter_class("heroku") is None
 
 
-@pytest.mark.parametrize("provider", ["vercel", "railway", "github"])
+@pytest.mark.parametrize("provider", ALL_PROVIDERS)
 def test_adapters_satisfy_the_protocol(provider):
     adapter = registry.build_adapter(provider, TOKEN)
     assert isinstance(adapter, ProviderAdapter)

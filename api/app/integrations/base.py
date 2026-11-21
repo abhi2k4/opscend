@@ -190,10 +190,49 @@ class HttpAdapter:
     def __repr__(self) -> str:  # never leak the token through logging or tracebacks
         return f"<{type(self).__name__}>"
 
+    async def _json(self, name: str, method: str, url: str, **kwargs: Any) -> Any:
+        """One provider call with the errors every adapter handles the same way.
+
+        `name` is the provider's display name. Messages never include the token.
+        """
+        try:
+            response = await self.client.request(method, url, **kwargs)
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"{name} request failed: {type(exc).__name__}") from exc
+        if response.status_code in (401, 403):
+            raise ProviderError(f"{name} rejected the credentials (check them and their scope)")
+        if response.status_code == 404:
+            raise ResourceUnavailableError(f"{name} could not find {response.request.url.path}")
+        if response.status_code >= 400:
+            raise ProviderError(
+                f"{name} API returned HTTP {response.status_code} for {response.request.url.path}"
+            )
+        return response.json() if response.content else None
+
     def _require_secret(self) -> str:
         if not self._webhook_secret:
             raise WebhookVerificationError("no webhook secret configured for this integration")
         return self._webhook_secret
+
+
+class PollOnly:
+    """For providers Opscend only polls: no webhooks to verify or translate."""
+
+    def parse_webhook(self, headers: dict[str, str], body: bytes) -> list[RawEventIn]:
+        raise WebhookVerificationError("this provider does not send webhooks to Opscend")
+
+    @staticmethod
+    def normalize(event_type: str, payload: dict[str, Any]) -> NormalizedBatch:
+        return NormalizedBatch()
+
+
+def repo_slug(url: str | None) -> str | None:
+    """`owner/name` from a GitHub URL, the form Opscend matches commits on."""
+    if not url or "github.com" not in url:
+        return None
+    path = url.split("github.com", 1)[1].lstrip(":/").removesuffix(".git").strip("/")
+    parts = path.split("/")
+    return f"{parts[0]}/{parts[1]}" if len(parts) >= 2 and all(parts[:2]) else None
 
 
 def lower_headers(headers: dict[str, str]) -> dict[str, str]:

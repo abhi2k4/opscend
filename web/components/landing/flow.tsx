@@ -21,9 +21,9 @@ const W = 168;
 const H = 52;
 
 const NODES: Node[] = [
-  { id: "vercel", x: 20, y: 30, title: "Vercel", sub: "REST · deploys", color: "var(--vercel)" },
-  { id: "railway", x: 20, y: 144, title: "Railway", sub: "GraphQL · deploys", color: "var(--railway)" },
-  { id: "github", x: 20, y: 258, title: "GitHub", sub: "REST · commits", color: "var(--github)" },
+  { id: "vercel", x: 20, y: 30, title: "Vercel, Railway", sub: "Render · Netlify", color: "var(--vercel)" },
+  { id: "railway", x: 20, y: 144, title: "Fly.io, AWS", sub: "Cloudflare Pages", color: "var(--railway)" },
+  { id: "github", x: 20, y: 258, title: "GitHub", sub: "commits · diffs", color: "var(--github)" },
   { id: "hooks", x: 280, y: 78, title: "Webhooks", sub: "verify · dedup · 202" },
   { id: "poll", x: 280, y: 210, title: "Poller", sub: "reconcile every 60s" },
   { id: "worker", x: 540, y: 144, title: "Worker", sub: "normalize · upsert", color: "var(--fg)" },
@@ -63,13 +63,12 @@ export function Flow() {
       id="how"
       no="01"
       label="How it works"
-      title={["Three providers,", "one worker."]}
+      title={["Every provider,", "one worker."]}
       lead="Webhooks verify, store and enqueue. The worker does the rest."
     >
       <Rise>
-        <div className="label mb-3">Fig. 2 — data flow</div>
         <div className="overflow-x-auto border border-line bg-surface p-4 sm:p-8">
-          <svg viewBox="0 0 990 340" className="mx-auto block w-full min-w-[720px]" role="img" aria-label="Events flow from Vercel, Railway and GitHub through webhooks and a poller into one worker, then to Postgres, the console and the investigator.">
+          <svg viewBox="0 0 990 340" className="mx-auto block w-full min-w-[720px]" role="img" aria-label="Events flow from the deploy providers and GitHub through webhooks and a poller into one worker, then to Postgres, the console and the investigator.">
             {EDGES.map(([from, to, tone], i) => {
               const d = path(byId[from], byId[to]);
               const dur = `${2.6 + (i % 4) * 0.6}s`;
