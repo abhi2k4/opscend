@@ -123,8 +123,19 @@ class VercelAdapter(HttpAdapter):
                     if link.get("type") == "github" and link.get("org") and link.get("repo")
                     else None
                 )
+                production = (project.get("targets") or {}).get("production") or {}
                 services.append(
-                    ServiceIn(external_id=project["id"], name=project["name"], repo=repo)
+                    ServiceIn(
+                        external_id=project["id"],
+                        name=project["name"],
+                        repo=repo,
+                        health_url=_production_url(production),
+                        latest_deployment=(
+                            _deployment_from_api(production, project["id"])
+                            if production.get("id")
+                            else None
+                        ),
+                    )
                 )
             until = (page.get("pagination") or {}).get("next")
             if not until:
@@ -204,17 +215,27 @@ def _commit_fields(meta: dict[str, Any]) -> dict[str, str | None]:
     }
 
 
+def _production_url(production: dict[str, Any]) -> str | None:
+    """The live site of a project: its first production alias, if that deployment is up."""
+    aliases = production.get("alias") or []
+    if production.get("readyState") != "READY" or not aliases:
+        return None
+    return f"https://{aliases[0]}"
+
+
 def _deployment_from_api(item: dict[str, Any], project_id: str) -> DeploymentIn:
     state = item.get("state") or item.get("readyState") or "QUEUED"
     status = _STATE.get(state, "queued")
     started = from_epoch_ms(item.get("buildingAt") or item.get("created") or item.get("createdAt"))
     finished = (
-        from_epoch_ms(item.get("ready")) if status in ("ready", "failed", "canceled") else None
+        from_epoch_ms(item.get("ready") or item.get("readyAt"))
+        if status in ("ready", "failed", "canceled")
+        else None
     )
     url = item.get("url")
     return DeploymentIn(
         service_external_id=project_id,
-        external_id=item["uid"],
+        external_id=item.get("uid") or item["id"],  # lists say `uid`, project targets say `id`
         status=status,
         started_at=started or utcnow(),
         finished_at=finished,

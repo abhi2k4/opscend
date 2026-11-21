@@ -17,7 +17,8 @@ from app.core import crypto, db
 from app.core import queue as queue_module
 from app.core.config import get_settings
 from app.core.time import utcnow
-from app.ingest import normalizer
+from app.incidents import rules
+from app.ingest import normalizer, poller
 from app.models import Deployment, Integration, Service
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -58,6 +59,10 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv(key, value)
     _clear_caches()
     normalizer._lock = asyncio.Lock()
+    poller._reconciling = asyncio.Lock()
+    # The recorded fixtures carry fixed timestamps, so "too old to be an incident" is
+    # switched off here and tested on its own in test_incidents.py.
+    monkeypatch.setattr(rules, "INCIDENT_MAX_AGE", timedelta(days=36500))
     yield monkeypatch
     _clear_caches()
 

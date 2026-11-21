@@ -20,11 +20,19 @@ export function Nav() {
           <Wordmark />
         </Link>
         <div className="hidden items-stretch md:flex">
-          {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="label flex items-center border-l border-line px-5 transition-colors hover:bg-raised hover:text-fg">
-              {l.label}
-            </a>
-          ))}
+          {LINKS.map((l) => {
+            const cls = "label flex items-center border-l border-line px-5 transition-colors hover:bg-raised hover:text-fg";
+            // The API reference is served by the backend, so it needs a full page load.
+            return l.href === API_DOCS_URL ? (
+              <a key={l.href} href={l.href} className={cls}>
+                {l.label}
+              </a>
+            ) : (
+              <Link key={l.href} href={l.href} className={cls}>
+                {l.label}
+              </Link>
+            );
+          })}
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="label flex items-center border-x border-line px-5 transition-colors hover:bg-raised hover:text-fg">
             GitHub
           </a>

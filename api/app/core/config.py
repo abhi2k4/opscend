@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_DIR = Path(__file__).resolve().parents[2]
@@ -56,6 +56,23 @@ class Settings(BaseSettings):
 
     poll_interval_seconds: int = Field(60, alias="OPSCEND_POLL_INTERVAL_SECONDS")
     health_interval_seconds: int = Field(60, alias="OPSCEND_HEALTH_INTERVAL_SECONDS")
+    # Stored log lines and health checks older than this are deleted hourly; 0 keeps everything.
+    retention_days: int = Field(30, alias="OPSCEND_RETENTION_DAYS")
+
+    @field_validator("database_url")
+    @classmethod
+    def _async_driver(cls, url: str) -> str:
+        """Accept the plain Postgres URL hosting providers hand out.
+
+        Railway, Neon and friends give `postgres://` or `postgresql://`; the app needs
+        the asyncpg driver, which also spells the TLS option `ssl`, not `sslmode`.
+        """
+        for scheme in ("postgres://", "postgresql://"):
+            if url.startswith(scheme):
+                url = "postgresql+asyncpg://" + url[len(scheme) :]
+        if url.startswith("postgresql+asyncpg://"):
+            url = url.replace("sslmode=", "ssl=")
+        return url
 
     @property
     def ai_configured(self) -> bool:

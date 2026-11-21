@@ -67,10 +67,10 @@ export function ProviderTile({ provider, size = 28, className }: { provider: Pro
 
 export function Logo({ size = 20, className }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-      <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--accent)" />
-      <path d="M6 15.5 10 11l3 2.5L18 8" stroke="var(--accent-ink)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="18" cy="8" r="1.6" fill="var(--accent-ink)" />
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={className} aria-hidden>
+      <rect width="32" height="32" rx="7" fill="var(--fg)" />
+      <path d="M7 21.5 12.5 15l4.5 3.5L24 10" stroke="var(--bg)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="24" cy="10" r="3.4" fill="var(--signal)" />
     </svg>
   );
 }

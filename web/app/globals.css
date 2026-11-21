@@ -16,6 +16,7 @@
   --color-warn: var(--warn);
   --color-err: var(--err);
   --color-info: var(--info);
+  --color-signal: var(--signal);
   --color-vercel: var(--vercel);
   --color-railway: var(--railway);
   --color-github: var(--github);
@@ -23,11 +24,11 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
 
   --animate-marquee: marquee 40s linear infinite;
   --animate-marquee-y: marquee-y 30s linear infinite;
@@ -95,7 +96,7 @@ body {
 :focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 button, [role="button"], a, summary {
@@ -107,7 +108,7 @@ button, [role="button"], a, summary {
 @utility panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 @utility label-mono {
@@ -158,11 +159,7 @@ button, [role="button"], a, summary {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: radial-gradient(
-    240px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in oklab, var(--accent) 80%, transparent),
-    transparent 70%
-  );
+  background: radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), var(--muted), transparent 70%);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   opacity: 0;
@@ -170,31 +167,15 @@ button, [role="button"], a, summary {
   pointer-events: none;
   z-index: 1;
 }
-.spotlight::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    420px circle at var(--mx, 50%) var(--my, 50%),
-    color-mix(in oklab, var(--accent) 7%, transparent),
-    transparent 60%
-  );
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
-  z-index: -1;
-}
-.spotlight:hover::before,
-.spotlight:hover::after {
+.spotlight:hover::before {
   opacity: 1;
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--raised) 25%, #1c1c1f 50%, var(--raised) 75%);
+  background: linear-gradient(90deg, var(--raised) 25%, var(--raised-hover) 50%, var(--raised) 75%);
   background-size: 200% 100%;
   animation: var(--animate-shimmer);
-  border-radius: 6px;
+  border-radius: 3px;
 }
 
 .text-gradient {
@@ -211,12 +192,12 @@ button, [role="button"], a, summary {
   line-height: 1.65;
   tab-size: 2;
 }
-.tok-k { color: #c792ea; }
-.tok-s { color: var(--accent); }
-.tok-c { color: var(--faint); font-style: italic; }
-.tok-f { color: #82aaff; }
-.tok-n { color: #f78c6c; }
-.tok-t { color: #7fdbca; }
+.tok-k { color: #c8a24a; }
+.tok-s { color: #8aa583; }
+.tok-c { color: var(--faint); }
+.tok-f { color: var(--fg); }
+.tok-n { color: #d4522a; }
+.tok-t { color: #8296a8; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -228,34 +209,12 @@ button, [role="button"], a, summary {
 }
 
 /* ────────────────────────────────────────────────────────────────
-   Landing theme: matte, printed, ungradiented.
-   Scoped to .landing so the console keeps its own tokens.
+   Landing layer: on top of the shared matte tokens it adds film grain,
+   fully square corners and the display type.
    Rules: no glows, no blurs, no gradients, square corners,
    one signal colour (rust) reserved for failure.
    ──────────────────────────────────────────────────────────────── */
 .landing {
-  --bg: #0f0f0e;
-  --surface: #141413;
-  --raised: #1b1b19;
-  --line: #2b2a27;
-  --line-soft: #201f1d;
-  --fg: #e6e1d6;
-  --muted: #8f8a7e;
-  --faint: #5c5850;
-
-  --accent: #e6e1d6; /* interactive = ink, not a neon */
-  --accent-ink: #0f0f0e;
-  --signal: #d4522a;
-
-  --ok: #8aa583;
-  --warn: #c8a24a;
-  --err: #d4522a;
-  --info: #8296a8;
-
-  --vercel: #e6e1d6;
-  --railway: #a195b8;
-  --github: #8f97a1;
-
   position: relative;
   background: var(--bg);
   color: var(--fg);
@@ -329,10 +288,45 @@ button, [role="button"], a, summary {
   50% { opacity: 0.25; }
 }
 
-/* Matte syntax palette. */
-.landing .tok-k { color: #c8a24a; }
-.landing .tok-s { color: #8aa583; }
-.landing .tok-c { color: var(--faint); font-style: normal; }
-.landing .tok-f { color: var(--fg); }
-.landing .tok-n { color: #d4522a; }
-.landing .tok-t { color: #8296a8; }
+/* ── Sherlog, the mascot ──────────────────────────────────────────
+   Calm: a breath, a blink and a slow sway of the glass (the eyes stay put).
+   Alert: one hop, then the glass leans in while the alert lasts. */
+.sherlog .sherlog-body {
+  animation: sherlog-breathe 4.5s ease-in-out infinite;
+  transform-origin: 100px 176px;
+}
+.sherlog .sherlog-eye {
+  animation: sherlog-blink 5.2s ease-in-out infinite;
+}
+.sherlog .sherlog-glass {
+  animation: sherlog-sway 6s ease-in-out infinite;
+  transition: rotate 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.sherlog .sherlog-hop {
+  transform-origin: 100px 190px;
+}
+.sherlog-alert .sherlog-hop {
+  animation: sherlog-hop 0.62s cubic-bezier(0.3, 0.7, 0.3, 1) 1;
+}
+.sherlog-alert .sherlog-glass {
+  rotate: -9deg;
+}
+@keyframes sherlog-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 0.985); }
+}
+@keyframes sherlog-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95.5% { transform: scaleY(0.08); }
+}
+@keyframes sherlog-sway {
+  0%, 100% { transform: rotate(1.5deg); }
+  50% { transform: rotate(-4.5deg); }
+}
+@keyframes sherlog-hop {
+  0% { transform: translateY(0) scale(1, 1); }
+  18% { transform: translateY(0) scale(1.06, 0.92); }
+  48% { transform: translateY(-22px) scale(0.97, 1.04); }
+  78% { transform: translateY(0) scale(1.04, 0.95); }
+  100% { transform: translateY(0) scale(1, 1); }
+}

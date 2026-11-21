@@ -5,10 +5,12 @@ from sqlalchemy import select
 
 from app import schemas
 from app.core import crypto
+from app.core.config import get_settings
 from app.core.db import session_scope
+from app.incidents.health import run_health_checks
 from app.main import app
-from app.models import Integration, Investigation, RawEvent
-from tests.conftest import ADMIN, drain_jobs
+from app.models import Integration, Investigation, RawEvent, Service
+from tests.conftest import ADMIN, drain_jobs, make_service
 
 PUBLIC = {
     ("GET", "/api/health"),
@@ -439,6 +441,7 @@ async def test_no_token_or_secret_in_any_response(demo_client):
         "investigation_id": (await client.get("/api/investigations")).json()[0]["id"],
         "integration_id": (await client.get("/api/integrations")).json()[0]["id"],
         "service_id": (await client.get("/api/services")).json()[0]["id"],
+        "session_id": "no-such-chat",
     }
     bodies = []
     for method, path in api_routes():
@@ -457,3 +460,60 @@ async def test_no_token_or_secret_in_any_response(demo_client):
     integration = (await client.get("/api/integrations")).json()[0]
     assert len(integration["token_hint"]) == 4
     assert "token" not in {key for key in integration if key != "token_hint"}
+
+
+async def test_api_reference_is_served_in_the_opscend_skin(anon_client):
+    page = await anon_client.get("/api/docs")
+    assert page.status_code == 200 and "text/html" in page.headers["content-type"]
+    assert "/api/docs/assets/theme.css" in page.text and "/api/openapi.json" in page.text
+    assert "ops-bar" in page.text and "Opscend API reference" in page.text
+
+    theme = await anon_client.get("/api/docs/assets/theme.css")
+    assert theme.status_code == 200 and theme.headers["content-type"].startswith("text/css")
+    assert (await anon_client.get("/api/docs/assets/sherlog.svg")).status_code == 200
+    # Only the listed assets are served: no path tricks.
+    assert (await anon_client.get("/api/docs/assets/..%2F..%2Fmain.py")).status_code == 404
+    # The page itself is not an API operation.
+    assert "/api/docs" not in (await anon_client.get("/api/openapi.json")).json()["paths"]
+
+
+async def test_health_url_can_be_set_turned_off_and_reset(client):
+    async with session_scope() as session:
+        service = await make_service(session, health_url="https://storefront.acme.dev")
+        service_id = service.id
+    url = f"/api/services/{service_id}"
+
+    assert (await client.patch(url, json={"health_url": "ftp://nope"})).status_code == 422
+    body = (
+        await client.patch(url, json={"health_url": " https://status.acme.dev/healthz "})
+    ).json()
+    assert body["health_url"] == "https://status.acme.dev/healthz"
+
+    # Off: stored as an empty string so the next sync does not quietly turn it back on.
+    assert (await client.patch(url, json={"health_url": ""})).json()["health_url"] is None
+    async with session_scope() as session:
+        assert (await session.get(Service, service_id)).health_url == ""
+    assert await run_health_checks() == 0
+
+    # Reset: back to "unset", which the next provider sync fills in again.
+    assert (await client.patch(url, json={"health_url": None})).json()["health_url"] is None
+    async with session_scope() as session:
+        assert (await session.get(Service, service_id)).health_url is None
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("postgres://u:p@host:5432/db", "postgresql+asyncpg://u:p@host:5432/db"),
+        (
+            "postgresql://u:p@host/db?sslmode=require",
+            "postgresql+asyncpg://u:p@host/db?ssl=require",
+        ),
+        ("postgresql+asyncpg://u:p@host/db", "postgresql+asyncpg://u:p@host/db"),
+        ("sqlite+aiosqlite:///./x.db", "sqlite+aiosqlite:///./x.db"),
+    ],
+)
+def test_hosted_postgres_urls_get_the_async_driver(env, given, expected):
+    env.setenv("DATABASE_URL", given)
+    get_settings.cache_clear()
+    assert get_settings().database_url == expected

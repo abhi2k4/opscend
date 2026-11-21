@@ -114,14 +114,17 @@ TOOL_NAMES = frozenset(spec["function"]["name"] for spec in TOOL_SPECS)
 
 
 class InvestigatorTools:
+    # The tools the model may call; subclasses extend this (see app/chat/tools.py).
+    _names: frozenset[str] = TOOL_NAMES
+
     def __init__(self, session: AsyncSession, ledger: EvidenceLedger) -> None:
         self._session = session
         self.ledger = ledger
 
     async def call(self, name: str, arguments: dict[str, Any]) -> str:
         """Run one tool by name. Errors come back as text for the model to read."""
-        if name not in TOOL_NAMES:
-            return f"error: unknown tool '{name}'. Available: {', '.join(sorted(TOOL_NAMES))}"
+        if name not in self._names:
+            return f"error: unknown tool '{name}'. Available: {', '.join(sorted(self._names))}"
         try:
             output = await getattr(self, name)(**{k: str(v) for k, v in arguments.items()})
         except TypeError:

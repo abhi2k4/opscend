@@ -25,7 +25,7 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
       aria-pressed={on}
       className={cn(
         "flex h-7 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[11px] uppercase tracking-wider transition-colors",
-        on ? "border-[#3a3a3f] bg-raised text-fg" : "border-line text-muted hover:text-fg",
+        on ? "border-[var(--line-strong)] bg-raised text-fg" : "border-line text-muted hover:text-fg",
       )}
     >
       {children}

@@ -11,10 +11,19 @@ from app.models import Base
 
 target_metadata = Base.metadata
 
+# Postgres-only indexes created by hand in migrations (not declared on the models),
+# so autogenerate must not offer to drop them.
+UNMODELED_INDEXES = {"ix_log_line_message_trgm"}
+
+
+def _include_object(obj, name, type_, reflected, compare_to) -> bool:  # noqa: ANN001
+    return not (type_ == "index" and reflected and name in UNMODELED_INDEXES)
+
 
 def _configure(**kwargs) -> None:  # noqa: ANN003
     context.configure(
         target_metadata=target_metadata,
+        include_object=_include_object,
         render_as_batch=True,  # lets SQLite apply ALTERs
         compare_type=True,
         **kwargs,

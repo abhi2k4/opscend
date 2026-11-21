@@ -3,7 +3,16 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -36,6 +45,7 @@ class Deployment(Base):
     __tablename__ = "deployment"
     __table_args__ = (
         UniqueConstraint("provider", "external_id", name="uq_deployment_provider_ext"),
+        Index("ix_deployment_service_started", "service_id", "started_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -67,7 +77,7 @@ class Commit(Base):
     repo: Mapped[str] = mapped_column(String(255), index=True)
     sha: Mapped[str] = mapped_column(String(64), index=True)
     message: Mapped[str] = mapped_column(Text)
-    author: Mapped[str] = mapped_column(String(255))
+    author: Mapped[str] = mapped_column(String(255), index=True)
     committed_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
     url: Mapped[str | None] = mapped_column(String(1024))
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -99,6 +109,8 @@ class LogLine(Base):
     )
     kind: Mapped[str] = mapped_column(String(16))
     seq: Mapped[int] = mapped_column(Integer)
-    ts: Mapped[datetime] = mapped_column(UTCDateTime)
+    # Indexed for retention pruning. On Postgres `message` also has a trigram index
+    # (migration 0004) that backs ILIKE log search.
+    ts: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
     level: Mapped[str] = mapped_column(String(8))
     message: Mapped[str] = mapped_column(Text)

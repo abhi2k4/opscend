@@ -33,14 +33,6 @@ class AccountInfo(BaseModel):
     account_name: str
 
 
-class ServiceIn(BaseModel):
-    external_id: str
-    name: str
-    repo: str | None = None
-    health_url: str | None = None
-    meta: dict[str, Any] = Field(default_factory=dict)
-
-
 class DeploymentIn(BaseModel):
     service_external_id: str
     external_id: str
@@ -53,6 +45,17 @@ class DeploymentIn(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     url: str | None = None
+
+
+class ServiceIn(BaseModel):
+    external_id: str
+    name: str
+    repo: str | None = None
+    health_url: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+    # The provider's current production deployment, when it reports one. Lets a
+    # service show its last deploy even when that is older than the sync window.
+    latest_deployment: DeploymentIn | None = None
 
 
 class CommitIn(BaseModel):
