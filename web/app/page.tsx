@@ -1,5 +1,4 @@
 import { Footer, Integrations, Quickstart } from "@/components/landing/closing";
-import { Features } from "@/components/landing/features";
 import { Flow } from "@/components/landing/flow";
 import { LandingFrame } from "@/components/landing/frame";
 import { HashScroll } from "@/components/landing/hash-scroll";
@@ -15,7 +14,6 @@ export default function Landing() {
       <main>
         <Hero />
         <Flow />
-        <Features />
         <Investigator />
         <Integrations />
         <Quickstart />

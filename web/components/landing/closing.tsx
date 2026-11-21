@@ -23,12 +23,11 @@ export function Integrations() {
   return (
     <Section
       id="integrations"
-      no="04"
+      no="03"
       label="Integrations"
       title={["Three today.", "One file each."]}
       lead="One contract. One file per provider."
     >
-      <div className="label mb-3">Table 3 — provider manifest</div>
       <div className="border-t border-line">
         {PROVIDERS.map((p, i) => (
           <Rise key={p.id} delay={0.04 * i}>
@@ -86,7 +85,6 @@ const LINES: { cmd?: string; out?: string; tone?: "ok" | "muted" }[] = [
   { out: "[ok] api        http://localhost:8000/api/docs", tone: "ok" },
   { out: "[ok] worker     polling every 60s", tone: "ok" },
   { out: "[ok] web        http://localhost:3000", tone: "ok" },
-  { out: "Demo mode on. Sample deploys seeded.", tone: "muted" },
 ];
 
 function TerminalDemo() {
@@ -113,7 +111,7 @@ function TerminalDemo() {
   }, [inView, line, chars]);
 
   return (
-    <div ref={ref} className="mono min-h-[280px] p-5 text-[12.5px] leading-[1.75]">
+    <div ref={ref} className="mono min-h-[250px] p-5 text-[12.5px] leading-[1.75]">
       {LINES.slice(0, line + 1).map((l, i) => {
         if (l.cmd) {
           const text = i === line ? l.cmd.slice(0, chars) : l.cmd;
@@ -144,7 +142,7 @@ export function Quickstart() {
     .map((l) => l.cmd!.split("   #")[0])
     .join("\n");
   return (
-    <Section id="quickstart" no="05" label="Quickstart" title={["Clone. Compose.", "Break something."]} lead="A few minutes on a clean machine.">
+    <Section id="quickstart" no="04" label="Quickstart" title={["Clone. Compose.", "Break something."]} lead="A few minutes on a clean machine.">
       <div className="grid grid-cols-1 border border-line lg:grid-cols-[1.4fr_1fr]">
         <Rise className="min-w-0 border-b border-line bg-surface lg:border-b-0 lg:border-r">
           <div className="label flex h-10 items-center justify-between border-b border-line px-5">
@@ -161,7 +159,7 @@ export function Quickstart() {
               ["Break something", "Then click Investigate."],
             ].map(([t, d], i) => (
               <li key={t} className="grid grid-cols-[44px_1fr] border-b border-line px-5 py-6 last:border-b-0">
-                <span className="mono pt-1 text-[11.5px] text-faint">5.{i + 1}</span>
+                <span className="mono pt-1 text-[11.5px] text-faint">4.{i + 1}</span>
                 <div>
                   <div className="text-[16px] font-medium">{t}</div>
                   <p className="mt-1.5 text-[14px] leading-relaxed text-muted">{d}</p>

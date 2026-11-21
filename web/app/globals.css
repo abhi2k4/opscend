@@ -30,20 +30,12 @@
   --radius-xl: 6px;
   --radius-2xl: 8px;
 
-  --animate-marquee: marquee 40s linear infinite;
-  --animate-marquee-y: marquee-y 30s linear infinite;
   --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-beam: beam 7s linear infinite;
   --animate-caret: caret 1s steps(1) infinite;
   --animate-float: float 9s ease-in-out infinite;
 
-  @keyframes marquee {
-    to { transform: translateX(-50%); }
-  }
-  @keyframes marquee-y {
-    to { transform: translateY(-50%); }
-  }
   @keyframes pulse-ring {
     0% { transform: scale(1); opacity: 0.7; }
     100% { transform: scale(2.6); opacity: 0; }

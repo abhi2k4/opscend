@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useInView, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { cn } from "@/lib/format";
 
 const EASE = [0.2, 0.7, 0.2, 1] as const;
@@ -93,29 +93,5 @@ export function Section({ id, no, label, title, lead, children }: { id?: string;
         </div>
       </div>
     </section>
-  );
-}
-
-/**
- * Animates its own height to follow its content, so swapping or growing
- * content eases the layout instead of snapping it.
- */
-export function SmoothHeight({ children, className }: { children: ReactNode; className?: string }) {
-  const reduce = useReducedMotion();
-  const inner = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | "auto">("auto");
-
-  useEffect(() => {
-    const el = inner.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => setHeight(el.offsetHeight));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <motion.div className={cn("overflow-hidden", className)} initial={false} animate={{ height }} transition={reduce ? { duration: 0 } : { duration: 0.5, ease: EASE }}>
-      <div ref={inner}>{children}</div>
-    </motion.div>
   );
 }

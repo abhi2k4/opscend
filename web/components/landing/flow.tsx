@@ -67,7 +67,6 @@ export function Flow() {
       lead="Webhooks verify, store and enqueue. The worker does the rest."
     >
       <Rise>
-        <div className="label mb-3">Fig. 2 — data flow</div>
         <div className="overflow-x-auto border border-line bg-surface p-4 sm:p-8">
           <svg viewBox="0 0 990 340" className="mx-auto block w-full min-w-[720px]" role="img" aria-label="Events flow from Vercel, Railway and GitHub through webhooks and a poller into one worker, then to Postgres, the console and the investigator.">
             {EDGES.map(([from, to, tone], i) => {
