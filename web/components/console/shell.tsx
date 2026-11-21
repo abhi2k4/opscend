@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquareText,
   Rocket,
   Search,
   Siren,
@@ -46,6 +47,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     heading: "Operate",
     items: [
       { href: "/console", label: "Overview", icon: LayoutDashboard, key: "o", exact: true },
+      { href: "/console/ask", label: "Ask Opscend", icon: MessageSquareText, key: "a" },
       { href: "/console/timeline", label: "Timeline", icon: Activity, key: "t" },
       { href: "/console/incidents", label: "Incidents", icon: Siren, key: "i" },
       { href: "/console/investigations", label: "Investigations", icon: Sparkles, key: "n" },
@@ -314,10 +316,15 @@ function ApiOffline({ message, onRetry }: { message: string; onRetry: () => void
 function Palette({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => void }) {
   const router = useRouter();
   const deployments = useApi<Deployment[]>(open ? "/deployments?limit=12" : null);
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
   const go = (href: string) => {
     setOpen(false);
     router.push(href);
   };
+  const question = search.trim();
   const item =
     "flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13px] text-muted data-[selected=true]:bg-raised data-[selected=true]:text-fg";
 
@@ -331,13 +338,13 @@ function Palette({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
     >
       <div className="flex items-center gap-2.5 border-b border-line px-3.5">
         <Search size={14} className="text-faint" />
-        <Command.Input placeholder="Jump to a page, deploy or action…" className="h-11 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint" />
+        <Command.Input value={search} onValueChange={setSearch} placeholder="Jump to a page, deploy or action, or ask a question…" className="h-11 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint" />
         <button onClick={() => setOpen(false)} className="text-faint hover:text-fg" aria-label="Close">
           <X size={14} />
         </button>
       </div>
       <Command.List className="max-h-[52vh] overflow-y-auto p-1.5 [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-faint">
-        <Command.Empty className="px-3 py-8 text-center text-[13px] text-muted">Nothing matches.</Command.Empty>
+        {question.length < 3 && <Command.Empty className="px-3 py-8 text-center text-[13px] text-muted">Nothing matches.</Command.Empty>}
         <Command.Group heading="Go to">
           {ALL_ITEMS.map((i) => (
             <Command.Item key={i.href} value={`go ${i.label}`} onSelect={() => go(i.href)} className={item}>
@@ -377,6 +384,16 @@ function Palette({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
                 <Dot color={d.status === "failed" ? "var(--err)" : d.status === "ready" ? "var(--ok)" : "var(--warn)"} />
               </Command.Item>
             ))}
+          </Command.Group>
+        )}
+        {question.length >= 3 && (
+          <Command.Group heading="Ask" forceMount>
+            <Command.Item value="ask-opscend-question" forceMount onSelect={() => go(`/console/ask?q=${encodeURIComponent(question)}`)} className={item}>
+              <MessageSquareText size={14} />
+              <span className="shrink-0 text-fg">Ask Opscend:</span>
+              <span className="min-w-0 flex-1 truncate">{question}</span>
+              <Kbd>↵</Kbd>
+            </Command.Item>
           </Command.Group>
         )}
       </Command.List>

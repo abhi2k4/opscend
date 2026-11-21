@@ -239,6 +239,65 @@ export interface Investigation {
   steps: InvestigationStep[];
 }
 
+// ───────────────────────────── ask opscend (chat)
+
+export type ChatCitationType = "deploy" | "log" | "commit" | "incident" | "service";
+
+/** A verified inline citation. The answer text carries it as `[type:ref]`. */
+export interface ChatCitation {
+  type: ChatCitationType;
+  ref: string;
+  label: string;
+  /** Log citations: the cited line's text. */
+  detail: string | null;
+  /** The deployment page this citation links to, when there is one. */
+  deployment_id: string | null;
+  /** Commit citations: the commit on GitHub. */
+  url: string | null;
+}
+
+export interface ChatStep {
+  /** Tool name. */
+  name: string;
+  input: Record<string, unknown> | null;
+  status: "running" | "ok" | "error";
+  summary: string | null;
+  duration_ms: number | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  index: number;
+  role: "user" | "assistant";
+  /** Markdown-ish text with `[type:ref]` citation markers. */
+  content: string;
+  /** User messages are always "done"; assistant messages start "pending". */
+  status: "pending" | "running" | "done" | "failed";
+  error: string | null;
+  citations: ChatCitation[];
+  steps: ChatStep[];
+  model: string | null;
+  tokens: number;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatSession extends ChatSessionSummary {
+  tokens_used: number;
+  messages: ChatMessage[];
+}
+
+export interface ChatAskRequest {
+  content: string;
+}
+
 // ───────────────────────────── developer console
 
 export interface RawEvent {
