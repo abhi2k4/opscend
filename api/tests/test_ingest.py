@@ -215,7 +215,9 @@ async def test_connecting_vercel_validates_encrypts_and_syncs(client):
             "storefront-web",
             "docs",
         }
-    assert await count(Deployment) == 3
+    # Three from the deployment list, plus the project's own production deployment,
+    # which is older than the sync window and would otherwise never be seen.
+    assert await count(Deployment) == 4
     # The newest deploy is still building, so the earlier failure is superseded: no incident.
     assert await count(Incident) == 0
 
@@ -224,7 +226,7 @@ async def test_connecting_vercel_validates_encrypts_and_syncs(client):
     synced = await client.post(f"/api/integrations/{created['id']}/sync")
     assert synced.status_code == 200
     assert await count(RawEvent) == events_before
-    assert await count(Deployment) == 3
+    assert await count(Deployment) == 4
 
     # Deleting the integration removes what hung off it.
     assert (await client.delete(f"/api/integrations/{created['id']}")).status_code == 200

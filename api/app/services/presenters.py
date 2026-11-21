@@ -32,7 +32,7 @@ async def service_out(session: AsyncSession, service: models.Service) -> schemas
         external_id=service.external_id,
         name=service.name,
         repo=service.repo,
-        health_url=service.health_url,
+        health_url=service.health_url or None,
         health="unknown" if latest is None else ("up" if latest.ok else "down"),
         latency_ms=latest.latency_ms if latest else None,
         health_history=[schemas.HealthPoint.model_validate(c) for c in reversed(checks)],

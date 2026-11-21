@@ -8,11 +8,12 @@ from sqlalchemy import select
 
 from app.core.db import session_scope
 from app.core.time import utcnow
+from app.incidents import rules
 from app.incidents.health import run_health_checks
 from app.ingest.normalizer import apply_batch
 from app.integrations.base import DeploymentIn, NormalizedBatch
 from app.models import Deployment, HealthCheck, Incident
-from tests.conftest import make_service
+from tests.conftest import make_deployment, make_service
 
 PROJECT = "prj_QmT4wq1storefront"
 
@@ -131,13 +132,14 @@ async def test_health_incident_needs_two_failures_and_resolves_when_healthy(data
         await make_service(session, health_url=url)
         await make_service(session, name="no-url", external_id="prj_none")
 
-    route = respx.get(url).respond(503)
+    route = respx.get(url).respond(200)
     async with httpx.AsyncClient() as http:
         assert await run_health_checks(http) == 1  # only the service with a URL
+        route.mock(return_value=httpx.Response(503))
+        await run_health_checks(http)
         async with session_scope() as session:
             assert await incidents(session) == []  # one failure is a blip
 
-        await run_health_checks(http)
         await run_health_checks(http)
         async with session_scope() as session:
             [incident] = await incidents(session)
@@ -173,3 +175,28 @@ async def test_health_failure_does_not_displace_an_open_deploy_incident(database
     async with session_scope() as session:
         [incident] = await incidents(session)
         assert incident.trigger == "deploy_failed"
+
+
+async def test_an_old_failure_is_history_not_an_incident(database, monkeypatch):
+    """A months-old failed deploy that arrives in a backfill must not page anyone."""
+    monkeypatch.setattr(rules, "INCIDENT_MAX_AGE", timedelta(hours=24))
+    async with session_scope() as session:
+        service = await make_service(session)
+        stale = await make_deployment(session, service, status="failed", minutes_ago=60 * 30)
+        assert await rules.on_deployment(session, stale) is None
+        recent = await make_deployment(session, service, status="failed", minutes_ago=30)
+        assert await rules.on_deployment(session, recent) is not None
+
+
+@respx.mock
+async def test_a_service_that_was_never_healthy_is_down_but_not_an_incident(database):
+    url = "https://dead-project.example.test/"
+    async with session_scope() as session:
+        await make_service(session, health_url=url)
+    respx.get(url).respond(404)
+    async with httpx.AsyncClient() as http:
+        for _ in range(4):
+            await run_health_checks(http)
+    async with session_scope() as session:
+        assert await incidents(session) == []
+        assert (await session.scalars(select(HealthCheck))).all()[-1].ok is False

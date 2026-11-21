@@ -5,8 +5,33 @@
       "name": "storefront-web",
       "accountId": "team_9xAcme",
       "framework": "nextjs",
-      "link": {"type": "github", "org": "acme", "repo": "storefront", "productionBranch": "main"},
-      "updatedAt": 1794990000000
+      "link": {
+        "type": "github",
+        "org": "acme",
+        "repo": "storefront",
+        "productionBranch": "main"
+      },
+      "updatedAt": 1794990000000,
+      "targets": {
+        "production": {
+          "id": "dpl_7Hq2LastProdStorefrontWeb01",
+          "readyState": "READY",
+          "createdAt": 1788000000000,
+          "readyAt": 1788000045000,
+          "alias": [
+            "storefront.acme.dev",
+            "storefront-web.vercel.app"
+          ],
+          "url": "storefront-web-9xk2-acme.vercel.app",
+          "target": "production",
+          "meta": {
+            "githubCommitSha": "1f0c2e7a9b3d4c5e6f708192a3b4c5d6e7f80910",
+            "githubCommitRef": "main",
+            "githubCommitMessage": "chore: bump deps",
+            "githubCommitAuthorName": "Dana Okafor"
+          }
+        }
+      }
     },
     {
       "id": "prj_Zk81docsSite",
@@ -16,5 +41,9 @@
       "updatedAt": 1794980000000
     }
   ],
-  "pagination": {"count": 2, "next": null, "prev": null}
+  "pagination": {
+    "count": 2,
+    "next": null,
+    "prev": null
+  }
 }

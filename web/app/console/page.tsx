@@ -1,14 +1,16 @@
 "use client";
 
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
-import { ArrowRight, CircleCheck, Siren } from "lucide-react";
+import { ArrowRight, CircleCheck, Pencil, Siren } from "lucide-react";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { mutate } from "swr";
 import { DeployRow, InvestigateButton, useNow } from "@/components/console/deploys";
 import { PageHeader } from "@/components/console/shell";
-import { ButtonLink, Empty, HealthBadge, Panel, PanelHeader, Skeleton, StatusBadge, Tag } from "@/components/ui/primitives";
+import { useToast } from "@/components/console/toast";
+import { Button, ButtonLink, Empty, HealthBadge, Panel, PanelHeader, Skeleton, StatusBadge, Tag } from "@/components/ui/primitives";
 import { ProviderTile } from "@/components/ui/provider";
-import { useApi } from "@/lib/api";
+import { api, ApiError, useApi } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import type { Overview, Service } from "@/lib/types";
 
@@ -36,38 +38,183 @@ function Stat({ label, value, tone, hint }: { label: string; value: number; tone
   );
 }
 
+const SLOTS = 24;
+
 function ServiceCard({ s, now }: { s: Service; now: number }) {
-  const max = Math.max(1, ...s.health_history.map((h) => h.latency_ms ?? 0));
+  const [editing, setEditing] = useState(false);
+  const checks = s.health_history.slice(-SLOTS);
+  const monitored = !!s.health_url;
+  const max = Math.max(1, ...checks.map((h) => h.latency_ms ?? 0));
+  const passed = checks.filter((h) => h.ok).length;
+  const host = s.health_url ? s.health_url.replace(/^https?:\/\//, "").replace(/\/$/, "") : null;
+
   return (
-    <div className="panel p-4">
+    <div className="panel group flex flex-col p-4">
       <div className="flex items-start gap-3">
         <ProviderTile provider={s.provider} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-medium">{s.name}</div>
           <div className="truncate font-mono text-[11px] text-faint">{s.repo ?? s.external_id}</div>
         </div>
-        <HealthBadge health={s.health} />
+        {monitored ? (
+          checks.length > 0 ? (
+            <HealthBadge health={s.health} />
+          ) : (
+            <span className="font-mono text-[11px] uppercase tracking-wider text-faint">first check soon</span>
+          )
+        ) : (
+          <span className="font-mono text-[11px] uppercase tracking-wider text-faint">not monitored</span>
+        )}
       </div>
-      {/* uptime bars: height is latency, colour is pass/fail */}
-      <div className="mt-4 flex h-8 items-end gap-[3px]" aria-label="Recent health checks">
-        {s.health_history.length === 0 && <span className="self-center font-mono text-[11px] text-faint">no health URL configured</span>}
-        {s.health_history.map((h, i) => (
+
+      {/* Always 24 slots, newest on the right: height is response time, colour is pass or fail. */}
+      <div className="mt-4 flex h-8 items-end gap-[3px]" role="img" aria-label={monitored ? `${passed} of ${checks.length} recent health checks passed` : "Health checks are off"}>
+        {Array.from({ length: SLOTS - checks.length }, (_, i) => (
+          <span key={`empty-${i}`} className="h-px flex-1 bg-line" />
+        ))}
+        {checks.map((h, i) => (
           <span
             key={i}
-            title={`${new Date(h.checked_at).toLocaleTimeString()} · ${h.status_code ?? "no response"} · ${h.latency_ms ?? "—"}ms`}
+            title={`${new Date(h.checked_at).toLocaleTimeString()} · ${h.status_code ?? "no response"} · ${h.latency_ms != null ? `${h.latency_ms}ms` : "timed out"}`}
             className="flex-1 rounded-[1px] transition-opacity hover:opacity-60"
-            style={{ height: `${h.ok ? 25 + ((h.latency_ms ?? 0) / max) * 75 : 100}%`, background: h.ok ? "color-mix(in oklab, var(--ok) 65%, transparent)" : "var(--err)" }}
+            style={{ height: `${h.ok ? 25 + ((h.latency_ms ?? 0) / max) * 75 : 100}%`, background: h.ok ? "color-mix(in oklab, var(--ok) 70%, transparent)" : "var(--err)" }}
           />
         ))}
       </div>
-      <div className="mt-3 flex items-center justify-between font-mono text-[11px] text-muted">
-        <span>{s.latency_ms != null ? `${s.latency_ms}ms` : "—"}</span>
-        <span className="flex items-center gap-2">
-          {s.last_deploy_status && <StatusBadge status={s.last_deploy_status} />}
-          <span className="text-faint">{timeAgo(s.last_deploy_at, now)}</span>
+
+      <div className="mt-3 flex min-h-5 items-center justify-between gap-3 font-mono text-[11px] text-muted">
+        {editing ? null : monitored ? (
+          <span className="flex min-w-0 items-center gap-2">
+            {checks.length > 0 && (
+              <span className="shrink-0 text-fg/90">
+                {Math.round((passed / checks.length) * 100)}% · {s.latency_ms != null ? `${s.latency_ms}ms` : "no response"}
+              </span>
+            )}
+            <a href={s.health_url!} target="_blank" rel="noreferrer" className="truncate text-faint hover:text-fg" title={s.health_url!}>
+              {host}
+            </a>
+            <button onClick={() => setEditing(true)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-fg focus:opacity-100 group-hover:opacity-100" aria-label={`Change the health URL of ${s.name}`}>
+              <Pencil size={11} />
+            </button>
+          </span>
+        ) : (
+          <button onClick={() => setEditing(true)} className="text-muted underline decoration-line underline-offset-4 hover:text-fg hover:decoration-fg">
+            Set a health URL
+          </button>
+        )}
+        {!editing && (
+          <span className="flex shrink-0 items-center gap-2">
+            {s.last_deploy_status ? (
+              <>
+                <StatusBadge status={s.last_deploy_status} />
+                <span className="text-faint" title={s.last_deploy_at ? new Date(s.last_deploy_at).toLocaleString() : undefined}>
+                  {timeAgo(s.last_deploy_at, now)}
+                </span>
+              </>
+            ) : (
+              <span className="text-faint">no deploys seen</span>
+            )}
+          </span>
+        )}
+      </div>
+
+      {editing && <HealthUrlEditor s={s} onDone={() => setEditing(false)} />}
+    </div>
+  );
+}
+
+/** Inline editor for the URL the uptime checker probes. */
+function HealthUrlEditor({ s, onDone }: { s: Service; onDone: () => void }) {
+  const toast = useToast();
+  const [url, setUrl] = useState(s.health_url ?? "");
+  const [busy, setBusy] = useState(false);
+
+  // "" turns checks off for good; null hands the choice back to the provider sync.
+  const save = async (value: string | null, message: string) => {
+    setBusy(true);
+    try {
+      await api(`/services/${s.id}`, { method: "PATCH", json: { health_url: value } });
+      await mutate("/overview");
+      toast.ok(message, s.name);
+      onDone();
+    } catch (e) {
+      toast.error("Could not save the health URL", (e as ApiError).message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="mt-1 space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (url.trim()) save(url.trim(), "Health URL saved");
+      }}
+    >
+      <input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://example.com/healthz"
+        type="url"
+        autoFocus
+        aria-label={`Health URL for ${s.name}`}
+        className="h-8 w-full rounded-md border border-line bg-bg px-2.5 font-mono text-[12px] outline-none placeholder:text-faint focus:border-[var(--line-strong)]"
+      />
+      <div className="flex items-center gap-1.5">
+        <Button type="submit" size="sm" variant="primary" loading={busy} disabled={!url.trim()}>
+          Save
+        </Button>
+        <Button type="button" size="sm" disabled={busy} onClick={() => save("", "Health checks turned off")}>
+          Turn off
+        </Button>
+        {s.provider === "vercel" && (
+          <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => save(null, "Using the production URL after the next sync")} title="Use this project's production URL">
+            Automatic
+          </Button>
+        )}
+        <Button type="button" size="sm" variant="ghost" className="ml-auto" disabled={busy} onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** What deserves attention first: anything down, then whatever shipped most recently. */
+function byUrgency(a: Service, b: Service) {
+  const rank = (s: Service) => (s.health === "down" ? 0 : s.last_deploy_status === "failed" ? 1 : 2);
+  return rank(a) - rank(b) || (b.last_deploy_at ?? "").localeCompare(a.last_deploy_at ?? "") || a.name.localeCompare(b.name);
+}
+
+const FIRST_SERVICES = 9;
+
+function ServiceGrid({ services, now }: { services: Service[]; now: number }) {
+  const [all, setAll] = useState(false);
+  const sorted = useMemo(() => [...services].sort(byUrgency), [services]);
+  const shown = all ? sorted : sorted.slice(0, FIRST_SERVICES);
+  const monitored = services.filter((s) => s.health_url).length;
+  const down = services.filter((s) => s.health === "down").length;
+
+  return (
+    <>
+      <div className="mb-2 mt-6 flex items-end justify-between gap-3">
+        <h2 className="label-mono">Service health</h2>
+        <span className="font-mono text-[11px] text-faint">
+          {monitored} of {services.length} monitored
+          {down > 0 && <span className="text-err"> · {down} down</span>}
         </span>
       </div>
-    </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {shown.map((s) => (
+          <ServiceCard key={s.id} s={s} now={now} />
+        ))}
+      </div>
+      {sorted.length > FIRST_SERVICES && (
+        <button onClick={() => setAll((v) => !v)} className="mt-3 flex h-9 w-full items-center justify-center rounded-lg border border-line font-mono text-[11px] uppercase tracking-wider text-muted transition-colors hover:bg-raised hover:text-fg">
+          {all ? "Show fewer" : `Show all ${sorted.length} services`}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -184,19 +331,15 @@ export default function OverviewPage() {
         </Panel>
       </div>
 
-      <h2 className="label-mono mb-2 mt-6">Service health</h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {data.services.map((s) => (
-          <ServiceCard key={s.id} s={s} now={now} />
-        ))}
-        {data.services.length === 0 && (
-          <Panel className="sm:col-span-2 lg:col-span-3">
-            <Empty title="No services yet" action={<ButtonLink href="/console/integrations" variant="primary">Connect a provider</ButtonLink>}>
-              Connect Vercel or Railway and their projects show up here with health and deploy status.
-            </Empty>
-          </Panel>
-        )}
-      </div>
+      {data.services.length > 0 ? (
+        <ServiceGrid services={data.services} now={now} />
+      ) : (
+        <Panel className="mt-6">
+          <Empty title="No services yet" action={<ButtonLink href="/console/integrations" variant="primary">Connect a provider</ButtonLink>}>
+            Connect Vercel or Railway and their projects show up here with health and deploy status.
+          </Empty>
+        </Panel>
+      )}
 
       <Panel className="mt-4">
         <PanelHeader

@@ -96,6 +96,13 @@ async def test_vercel_list_services():
         ("prj_QmT4wq1storefront", "storefront-web", "acme/storefront"),
         ("prj_Zk81docsSite", "docs", None),
     ]
+    # A project with a live production deployment brings its URL and that deployment along,
+    # so the service can be health-checked and show its last deploy without extra calls.
+    web, docs = services
+    assert web.health_url == "https://storefront.acme.dev"
+    assert web.latest_deployment.external_id == "dpl_7Hq2LastProdStorefrontWeb01"
+    assert web.latest_deployment.status == "ready" and web.latest_deployment.branch == "main"
+    assert docs.health_url is None and docs.latest_deployment is None
 
 
 @respx.mock

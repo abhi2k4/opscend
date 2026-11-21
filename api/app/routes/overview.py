@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -33,9 +33,19 @@ class ServiceUpdate(BaseModel):
 async def update_service(
     service_id: str, body: ServiceUpdate, session: SessionDep
 ) -> schemas.Service:
-    """Set or clear the URL the uptime checker probes for this service."""
+    """Set the URL the uptime checker probes for this service.
+
+    A URL turns checks on for that address. An empty string turns them off and keeps
+    them off. `null` goes back to automatic: the provider's own URL on the next sync.
+    """
     service = await get_or_404(session, models.Service, service_id)
-    service.health_url = (body.health_url or "").strip() or None
+    if body.health_url is None:
+        service.health_url = None
+    else:
+        url = body.health_url.strip()
+        if url and not url.startswith(("http://", "https://")):
+            raise HTTPException(422, "The health URL must start with http:// or https://")
+        service.health_url = url
     await session.commit()
     return await service_out(session, service)
 

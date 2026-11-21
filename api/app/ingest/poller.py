@@ -16,6 +16,7 @@ from app.core.db import session_scope
 from app.core.time import utcnow
 from app.integrations.base import (
     CommitSource,
+    DeploymentIn,
     NormalizedBatch,
     ProviderAdapter,
     ProviderError,
@@ -120,7 +121,13 @@ async def _sync(
     skipped: list[str] = []
 
     if Capability.LIST_SERVICES in capabilities:
-        await _upsert_services(session, integration, await adapter.list_services())
+        listed = await adapter.list_services()
+        await _upsert_services(session, integration, listed)
+        # The provider's own "latest deployment" per service, so a quiet service still
+        # shows when it last shipped. Same dedup as any poll: a known state costs a lookup.
+        for item in listed:
+            if item.latest_deployment is not None:
+                events.append(_deployment_event(provider, item.latest_deployment))
     if Capability.LIST_DEPLOYS in capabilities:
         services = (
             await session.scalars(select(Service).where(Service.integration_id == integration_id))
@@ -130,14 +137,7 @@ async def _sync(
             # Newest first: during a backfill an old failure then sees its successor
             # and opens no incident (see incidents/rules.py).
             for deployment in sorted(deployments, key=lambda d: d.started_at, reverse=True):
-                events.append(
-                    RawEventIn(
-                        provider=provider,
-                        event_type="poll.deployment",
-                        dedup_key=f"{provider}:poll:{deployment.external_id}:{deployment.status}",
-                        payload=NormalizedBatch(deployments=[deployment]).model_dump(mode="json"),
-                    )
-                )
+                events.append(_deployment_event(provider, deployment))
     if Capability.COMMITS in capabilities and isinstance(adapter, CommitSource):
         for repo in await _repos(session, adapter):
             try:
@@ -161,6 +161,15 @@ async def _sync(
         if row is not None:
             await process_raw_event(row.id)
     return skipped
+
+
+def _deployment_event(provider: str, deployment: DeploymentIn) -> RawEventIn:
+    return RawEventIn(
+        provider=provider,
+        event_type="poll.deployment",
+        dedup_key=f"{provider}:poll:{deployment.external_id}:{deployment.status}",
+        payload=NormalizedBatch(deployments=[deployment]).model_dump(mode="json"),
+    )
 
 
 async def _repos(session: AsyncSession, adapter: CommitSource) -> list[str]:
@@ -193,12 +202,14 @@ async def _upsert_services(
                 Service(
                     integration_id=integration.id,
                     provider=integration.provider,
-                    **item.model_dump(),
+                    **item.model_dump(exclude={"latest_deployment"}),
                 )
             )
             continue
         service.integration_id = integration.id
         service.name, service.meta = item.name, item.meta
         service.repo = item.repo or service.repo
-        service.health_url = service.health_url or item.health_url
+        # None = never set, so adopt the provider's URL. "" = turned off by the user: keep it off.
+        if service.health_url is None:
+            service.health_url = item.health_url
     await session.commit()
