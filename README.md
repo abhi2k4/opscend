@@ -33,6 +33,7 @@ Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a faile
 | --- | --- | --- |
 | Landing | `/` | Pitch, animated demo, quick start |
 | Overview | `/console` | Service health, open incidents, latest deploys |
+| Ask Opscend | `/console/ask` | Chat with your deploy data: answers cite the deploys, log lines and commits they come from |
 | Timeline | `/console/timeline` | Deploys, commits and incidents from all providers on one rail |
 | Deploy detail | `/console/deployments/:id` | Build and runtime logs with level filters, commit diff, Investigate |
 | Investigation | `/console/investigations/:id` | Live trace of every model turn and tool call, next to the cited report |
@@ -42,7 +43,7 @@ Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a faile
 | Event inspector | `/console/events` | Every raw webhook and poll result, with dedup state |
 | Chaos lab | `/console/chaos` | Five scripted failures pushed through the real ingest pipeline |
 
-Developer conveniences: `⌘K` command palette, `g` + letter navigation, click-to-copy ids and SHAs, and interactive API docs at `/api/docs`.
+Developer conveniences: `⌘K` command palette (type a question to send it to Ask Opscend), `g` + letter navigation, click-to-copy ids and SHAs, and interactive API docs at `/api/docs`.
 
 ## The AI investigator
 
@@ -51,6 +52,18 @@ Developer conveniences: `⌘K` command palette, `g` + letter navigation, click-t
 - At most eight tool calls per run, with a token budget. Every step is stored as a span.
 - The report must cite log lines, commits or deploys it actually saw, or say it is inconclusive.
 - Log text is passed as untrusted data. Provider tokens never enter the model context.
+
+## Ask Opscend
+
+A chat assistant over everything Opscend has collected. Ask "which services had failed deploys this week?", "search the logs for ECONNREFUSED" or "what's our failure rate and recovery time per service?".
+
+- Same model settings and limits as the investigator (`OPSCEND_AI_MAX_TOOL_CALLS`, `OPSCEND_AI_TOKEN_BUDGET`, per answer).
+- The investigator's five tools plus six read-only query tools: `list_services`, `search_deployments`, `search_logs`, `list_incidents`, `list_commits`, `deploy_stats`. There is no free-form SQL.
+- Every `[deploy:…]`, `[log:…]` or `[commit:…]` citation is checked against what the tools actually returned; invented ids are removed before the answer is saved.
+- Answers run as jobs (like investigations) and the UI polls for progress, so they work the same with inline jobs and the arq worker.
+- Log search covers stored lines. On Postgres it uses a trigram index (`pg_trgm`, created by migration 0004 when the database user is allowed to).
+
+Stored log lines and health checks older than `OPSCEND_RETENTION_DAYS` (default 30, `0` keeps everything) are deleted hourly.
 
 ## Notifications and email alerts
 
