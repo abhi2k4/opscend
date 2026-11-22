@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: help install dev-api dev-web worker migrate test lint format check
+.PHONY: help install dev-api dev-web worker migrate test lint format check check-web
 
 help:
 	@echo "make install   install api (uv) and web (pnpm) dependencies"
@@ -38,3 +38,6 @@ format:
 	cd api && $(UV) run ruff check . --fix && $(UV) run ruff format .
 
 check: lint test
+
+check-web:
+	cd web && pnpm typecheck
