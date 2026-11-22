@@ -1,44 +1,37 @@
 import { Sherlog } from "@/components/ui/sherlog";
 import { Rise, Section } from "./reveal";
 
-const RULES = [
-  ["No write path", "Five read tools. Nothing else."],
-  ["Evidence or nothing", "Every claim cites a log line, commit or deploy."],
-  ["Bounded runs", "Eight tool calls, then it must answer."],
-  ["Allowed to not know", "Inconclusive is a valid report."],
+const PROMISES = [
+  ["It reads. It never writes.", "Sherlog can look at logs, diffs and deploys. It has no way to change anything."],
+  ["It shows its evidence.", "Every claim links to the log line or commit behind it, so you can check it in a click."],
+  ["It says when it doesn't know.", "No evidence, no verdict. You get “inconclusive” and what was missing."],
 ];
 
 export function Investigator() {
   return (
     <Section
       id="investigator"
-      no="02"
-      label="Investigator"
-      title={["It reads the logs.", "Then it shows", "its work."]}
-      lead="Every step traced. Every claim cited."
+      label="The investigator"
+      title={["Meet Sherlog."]}
+      lead="When a deploy fails, Sherlog reads the logs and the diff for you, then tells you what it found and how sure it is."
     >
-      <div className="grid grid-cols-1 border-t border-line lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <Rise className="flex items-center gap-6 border-b border-line py-8 lg:border-r lg:pr-10">
-          <Sherlog size={132} className="shrink-0" />
-          <div>
-            <div className="label">Meet the investigator</div>
-            <div className="display mt-2 text-[44px] sm:text-[56px]">Sherlog</div>
-          </div>
+      <div className="grid grid-cols-1 items-center gap-x-20 gap-y-12 lg:grid-cols-[auto_1fr]">
+        <Rise className="flex justify-center lg:justify-start">
+          <Sherlog size={240} />
         </Rise>
-
-        <ol>
-          {RULES.map(([title, body], i) => (
-            <Rise key={title} delay={0.05 * i}>
-              <li className="grid grid-cols-[44px_1fr] border-b border-line py-5 lg:pl-10">
-                <span className="mono pt-1 text-[11.5px] text-faint">2.{i + 1}</span>
+        <ul className="space-y-9">
+          {PROMISES.map(([title, body], i) => (
+            <Rise key={title} delay={0.08 * i}>
+              <li className="grid grid-cols-[20px_1fr] gap-x-4">
+                <span aria-hidden className="mt-[9px] size-2 bg-[var(--signal)]" />
                 <div>
-                  <div className="text-[16px] font-medium">{title}</div>
-                  <p className="mt-1.5 max-w-md text-[14px] leading-relaxed text-muted">{body}</p>
+                  <h3 className="text-[20px] font-medium">{title}</h3>
+                  <p className="mt-2 max-w-lg text-[16px] leading-[1.65] text-fg/70">{body}</p>
                 </div>
               </li>
             </Rise>
           ))}
-        </ol>
+        </ul>
       </div>
     </Section>
   );

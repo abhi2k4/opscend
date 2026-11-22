@@ -8,7 +8,7 @@ export default function NotFound() {
   return (
     <LandingFrame>
       <Nav />
-      <main className="mx-auto grid min-h-[calc(100dvh-3rem)] max-w-[1360px] items-center gap-10 px-5 py-16 sm:px-8 md:grid-cols-[1fr_auto]">
+      <main className="mx-auto grid grid-cols-1 min-h-[calc(100dvh-3rem)] max-w-[1120px] items-center gap-10 px-6 py-16 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto]">
         <div>
           <div className="label">
             <span className="text-[var(--signal)]">404</span>

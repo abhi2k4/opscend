@@ -12,56 +12,27 @@ import { Lines, Rise, Rule, Section } from "./reveal";
 
 // ───────────────────────────── integrations
 
-const PROVIDERS = [
-  { id: "vercel", via: "REST", caps: "deploys · build + runtime logs · webhooks" },
-  { id: "railway", via: "GraphQL", caps: "deploys · build + runtime logs" },
-  { id: "render", via: "REST", caps: "deploys · build + runtime logs" },
-  { id: "fly", via: "GraphQL", caps: "releases · runtime logs" },
-  { id: "netlify", via: "REST", caps: "deploys · webhooks" },
-  { id: "cloudflare", via: "REST", caps: "pages deploys · build logs" },
-  { id: "aws", via: "SigV4", caps: "amplify builds · ecs rollouts" },
-  { id: "github", via: "REST", caps: "commits · diffs · webhooks" },
-] as const;
+const PROVIDERS = ["vercel", "railway", "render", "fly", "netlify", "cloudflare", "aws", "github"] as const;
 
 export function Integrations() {
   return (
-    <Section
-      id="integrations"
-      no="03"
-      label="Integrations"
-      title={["Eight today.", "One file each."]}
-      lead="One contract. One file per provider."
-    >
-      <div className="border-t border-line">
-        {PROVIDERS.map((p, i) => (
-          <Rise key={p.id} delay={0.04 * i}>
-            <div className="grid grid-cols-[32px_1fr_auto] items-center gap-x-4 border-b border-line py-4 sm:grid-cols-[32px_180px_90px_1fr_110px]">
-              <ProviderIcon provider={p.id} size={15} />
-              <span className="text-[16px] font-medium">{providerName(p.id)}</span>
-              <span className="mono hidden text-[12px] sm:block">{p.via}</span>
-              <span className="mono hidden text-[12px] text-muted sm:block">{p.caps}</span>
-              <span className="mono text-right text-[11px] uppercase tracking-[0.12em] text-ok">
-                <span className="mr-2 inline-block size-1.5 translate-y-[-1px] bg-ok" />
-                available
-              </span>
-            </div>
-          </Rise>
-        ))}
-        <a
-          href={`${REPO_URL}/blob/main/docs/adding-a-provider.md`}
-          target="_blank"
-          rel="noreferrer"
-          className="group grid grid-cols-[32px_1fr_auto] items-center gap-x-4 border-b border-line py-5 transition-colors hover:bg-raised"
-        >
-          <span className="mono text-[15px] text-fg">+</span>
-          <span className="text-[16px] font-medium">
-            Write your own adapter
-          </span>
-          <span className="mono flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] text-muted group-hover:text-fg">
-            guide <ArrowUpRight size={12} />
-          </span>
+    <Section id="integrations" label="Integrations" title={["Works with", "where you deploy."]} lead="Eight platforms today. Each one is a single file, so adding yours is an afternoon.">
+      <Rise>
+        <ul className="grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-4">
+          {PROVIDERS.map((id) => (
+            <li key={id} className="flex flex-col items-center gap-4 bg-bg px-4 py-10 text-fg/85 transition-colors duration-300 hover:bg-surface hover:text-fg">
+              <ProviderIcon provider={id} size={30} />
+              <span className="text-[15px]">{providerName(id)}</span>
+            </li>
+          ))}
+        </ul>
+      </Rise>
+      <Rise delay={0.1}>
+        <a href={`${REPO_URL}/blob/main/docs/adding-a-provider.md`} target="_blank" rel="noreferrer" className="group mt-8 inline-flex items-center gap-2 text-[15px] text-fg/80 transition-colors hover:text-fg">
+          Not on the list? Write your own adapter
+          <ArrowUpRight size={14} className="text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
         </a>
-      </div>
+      </Rise>
     </Section>
   );
 }
@@ -103,7 +74,7 @@ function TerminalDemo() {
   }, [inView, line, chars]);
 
   return (
-    <div ref={ref} className="mono min-h-[250px] p-5 text-[12.5px] leading-[1.75]">
+    <div ref={ref} className="mono min-h-[250px] p-5 text-[13.5px] leading-[1.8] sm:p-6">
       {LINES.slice(0, line + 1).map((l, i) => {
         if (l.cmd) {
           const text = i === line ? l.cmd.slice(0, chars) : l.cmd;
@@ -134,36 +105,19 @@ export function Quickstart() {
     .map((l) => l.cmd!.split("   #")[0])
     .join("\n");
   return (
-    <Section id="quickstart" no="04" label="Quickstart" title={["Clone. Compose.", "Break something."]} lead="A few minutes on a clean machine.">
-      <div className="grid grid-cols-1 border border-line lg:grid-cols-[1.4fr_1fr]">
-        <Rise className="min-w-0 border-b border-line bg-surface lg:border-b-0 lg:border-r">
-          <div className="label flex h-10 items-center justify-between border-b border-line px-5">
-            <span>Terminal</span>
-            <CopyButton value={copyAll} label="Copy commands" />
-          </div>
-          <TerminalDemo />
-        </Rise>
-        <Rise delay={0.08}>
-          <ol>
-            {[
-              ["Sign in", "Credentials from your .env."],
-              ["Connect providers", "Paste a token."],
-              ["Break something", "Then click Investigate."],
-            ].map(([t, d], i) => (
-              <li key={t} className="grid grid-cols-[44px_1fr] border-b border-line px-5 py-6 last:border-b-0">
-                <span className="mono pt-1 text-[11.5px] text-faint">4.{i + 1}</span>
-                <div>
-                  <div className="text-[16px] font-medium">{t}</div>
-                  <p className="mt-1.5 text-[14px] leading-relaxed text-muted">{d}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </Rise>
-      </div>
-      <Link href={DOCS_URL} className="mono mt-5 inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.12em] text-muted transition-colors hover:text-fg">
-        Full setup guide <ArrowRight size={13} />
-      </Link>
+    <Section id="quickstart" label="Quickstart" title={["Running in", "three commands."]} lead="No account and no cloud. It runs on your machine with Docker, and starts with demo data so there is something to look at.">
+      <Rise className="max-w-3xl border border-line bg-surface">
+        <div className="flex h-11 items-center justify-between border-b border-line px-5">
+          <span className="label">Terminal</span>
+          <CopyButton value={copyAll} label="Copy commands" />
+        </div>
+        <TerminalDemo />
+      </Rise>
+      <Rise delay={0.1}>
+        <Link href={DOCS_URL} className="group mt-8 inline-flex items-center gap-2 text-[15px] text-fg/80 transition-colors hover:text-fg">
+          Read the full setup guide <ArrowRight size={14} className="text-muted transition-transform group-hover:translate-x-1" />
+        </Link>
+      </Rise>
     </Section>
   );
 }
@@ -174,38 +128,36 @@ export function Footer() {
   return (
     <footer>
       <Rule />
-      <div className="relative mx-auto max-w-[1360px] px-5 py-20 sm:px-8 lg:py-28">
-        <Rise delay={0.3} className="absolute bottom-16 right-5 hidden sm:right-8 md:block lg:bottom-24">
+      <div className="mx-auto grid max-w-[1120px] grid-cols-1 items-end gap-10 px-6 py-24 sm:px-8 md:grid-cols-[1fr_auto] lg:py-36">
+        <div>
+          <h2 className="display text-[clamp(44px,7.4vw,104px)]">
+            <Lines lines={["The next red deploy", <span key="e">explains itself<span className="text-[var(--signal)]">.</span></span>]} />
+          </h2>
+          <Rise delay={0.2} className="mt-10 flex flex-wrap items-center gap-x-7 gap-y-4">
+            <Link href={PRIMARY_CTA.href} className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
+              {PRIMARY_CTA.label} <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+            </Link>
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[15px] text-fg/80 transition-colors hover:text-fg">
+              <ProviderIcon provider="github" size={16} /> View the source
+            </a>
+          </Rise>
+        </div>
+        <Rise delay={0.3} className="hidden md:block">
           <Sherlog size={170} />
-          <div className="label mt-1 text-center">Sherlog · on the case</div>
-        </Rise>
-        <h2 className="display text-[clamp(52px,11vw,168px)]">
-          <Lines lines={["The next red deploy", <span key="e">explains itself<span className="text-[var(--signal)]">.</span></span>]} />
-        </h2>
-        <Rise delay={0.2} className="mt-10 flex flex-wrap items-stretch gap-3">
-          <Link href={PRIMARY_CTA.href} className="group flex h-12 items-center gap-3 bg-fg px-6 text-[15px] font-medium text-bg transition-opacity hover:opacity-85">
-            {PRIMARY_CTA.label} <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-          </Link>
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className="flex h-12 items-center gap-3 border border-line px-6 text-[15px] font-medium transition-colors hover:bg-raised">
-            <ProviderIcon provider="github" size={15} /> Source on GitHub
-          </a>
         </Rise>
       </div>
 
-      <div className="border-t border-line">
-        <div className="label mx-auto grid max-w-[1360px] gap-y-4 px-5 py-6 sm:grid-cols-[1fr_auto] sm:px-8">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <Wordmark className="normal-case tracking-normal" />
-            <span>v{VERSION}</span>
-            <span>open source</span>
-            <span>built in public</span>
+      <div className="border-t border-line-soft">
+        <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-x-8 gap-y-4 px-6 py-7 text-[13.5px] text-muted sm:px-8">
+          <div className="flex items-center gap-4">
+            <Wordmark />
+            <span>v{VERSION} · MIT</span>
           </div>
-          <nav className="flex flex-wrap gap-x-6 gap-y-2">
-            <Link href={DOCS_URL} className="hover:text-fg">Docs</Link>
-            {!LANDING_ONLY && <Link href="/console" className="hover:text-fg">Console</Link>}
-            {!LANDING_ONLY && <a href={API_DOCS_URL} className="hover:text-fg">API reference</a>}
-            <a href="/#integrations" className="hover:text-fg">Integrations</a>
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-fg">GitHub</a>
+          <nav className="flex flex-wrap gap-x-7 gap-y-2">
+            <Link href={DOCS_URL} className="transition-colors hover:text-fg">Docs</Link>
+            {!LANDING_ONLY && <Link href="/console" className="transition-colors hover:text-fg">Console</Link>}
+            {!LANDING_ONLY && <a href={API_DOCS_URL} className="transition-colors hover:text-fg">API reference</a>}
+            <a href={REPO_URL} target="_blank" rel="noreferrer" className="transition-colors hover:text-fg">GitHub</a>
           </nav>
         </div>
       </div>

@@ -15,7 +15,7 @@ const LINKS = [
 export function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-bg">
-      <nav className="mx-auto flex h-12 max-w-[1360px] items-stretch justify-between px-5 sm:px-8">
+      <nav className="mx-auto flex h-12 max-w-[1120px] items-stretch justify-between px-6 sm:px-8">
         <Link href="/" aria-label="Opscend home" className="flex items-center">
           <Wordmark />
         </Link>
@@ -37,7 +37,7 @@ export function Nav() {
             GitHub
           </a>
         </div>
-        <Link href={PRIMARY_CTA.href} className="label -mr-5 flex items-center gap-2 bg-fg px-5 !text-bg transition-opacity hover:opacity-85 sm:-mr-8">
+        <Link href={PRIMARY_CTA.href} className="label flex items-center gap-2 bg-fg px-5 !text-bg transition-opacity hover:opacity-85">
           {PRIMARY_CTA.short} <ArrowUpRight size={13} />
         </Link>
       </nav>
