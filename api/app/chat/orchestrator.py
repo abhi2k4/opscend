@@ -45,7 +45,7 @@ async def run_chat_reply(message_id: str, llm: LLMClient | None = None) -> None:
         message.status = "running"
         await session.commit()
 
-        answer: tuple[str, list[dict[str, Any]]] | None = None
+        answer: tuple[str, list[dict[str, Any]], list[dict[str, Any]]] | None = None
         error: str | None = None
         try:
             turn = _Turn(session, message, llm or build_llm())
@@ -61,7 +61,7 @@ async def run_chat_reply(message_id: str, llm: LLMClient | None = None) -> None:
         if message is None:  # the conversation was deleted while it ran
             return
         if answer is not None:
-            message.content, message.citations = answer
+            message.content, message.citations, message.charts = answer
         message.status = "done" if answer else "failed"
         message.error = error
         message.steps = [
@@ -107,7 +107,11 @@ class _Turn:
                     continue
                 for citation in item.citations:
                     self.ledger.seed(citation)
-            history.append({"role": item.role, "content": item.content[:HISTORY_CHARS]})
+            # Charts belong to the turn that built them; an old marker must not be copied.
+            text = (
+                citations.CHART.sub(" ", item.content) if item.role == "assistant" else item.content
+            )
+            history.append({"role": item.role, "content": text[:HISTORY_CHARS]})
         if not history or history[-1]["role"] != "user":
             raise ChatFailed("there is no question to answer")
         return [
@@ -122,7 +126,7 @@ class _Turn:
             or self.message.tokens >= self.settings.ai_token_budget
         )
 
-    async def execute(self) -> tuple[str, list[dict[str, Any]]]:
+    async def execute(self) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
         messages = await self._context()
         retried = False
         for turn in range(MAX_TURNS):

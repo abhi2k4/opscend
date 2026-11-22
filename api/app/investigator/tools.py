@@ -55,7 +55,20 @@ def untrusted(label: str, text: str) -> str:
     return f'<untrusted_data source="{label}">\n{safe}\n{UNTRUSTED_CLOSE}'
 
 
+def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+    """Let an optional parameter be sent as null, which models often do instead of omitting it."""
+    out = {**schema, "type": [schema["type"], "null"]}
+    if "enum" in schema:
+        out["enum"] = [*schema["enum"], None]
+    return out
+
+
 def _function(name: str, description: str, properties: dict[str, Any], required: list[str]) -> dict:
+    # Providers validate tool calls against this schema and reject the whole request on a
+    # mismatch, so optional parameters must accept the null a model sends for "not set".
+    properties = {
+        key: schema if key in required else _nullable(schema) for key, schema in properties.items()
+    }
     return {
         "type": "function",
         "function": {
@@ -178,7 +191,8 @@ class InvestigatorTools:
             text += "\n" + untrusted("commit message", f"{message}\n(author: {author})")
         return text
 
-    async def get_logs(self, deployment_id: str, kind: str = "build") -> str:
+    async def get_logs(self, deployment_id: str, kind: str | None = "build") -> str:
+        kind = kind or "build"
         if kind not in ("build", "runtime"):
             return "error: kind must be 'build' or 'runtime'"
         deployment = await self._deployment(deployment_id)

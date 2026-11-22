@@ -4,6 +4,7 @@ Like the investigator's, every tool here is read-only. Each id a tool shows the 
 goes into the `ChatLedger`, and an answer may only cite ids found there.
 """
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -13,7 +14,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.sql import Select
 
-from app.core.time import duration_ms, utcnow
+from app.core.time import duration_ms, ensure_utc, utcnow
 from app.investigator.tools import (
     MAX_LINE_CHARS,
     TOOL_SPECS,
@@ -30,6 +31,8 @@ MAX_ROWS = 50
 MAX_LOG_HITS = 40
 MAX_STATS_DEPLOYS = 5000
 MAX_SERVICES = 100
+MAX_CHART_BARS = 12
+MAX_TREND_BUCKETS = 92
 
 # Deploy statuses (see `DeployStatus` in app/schemas.py).
 FINISHED_BAD = "failed"
@@ -41,6 +44,40 @@ class ChatLedger(EvidenceLedger):
     """The investigator's ledger plus the incidents shown."""
 
     incidents: set[str] = field(default_factory=set)
+    # Charts the tools built this turn, by id. Only these may appear in the answer.
+    charts: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def add_chart(
+        self,
+        kind: str,
+        title: str,
+        unit: str,
+        categories: list[str],
+        series: list[tuple[str, str, list[float | None]]],
+        subtitle: str | None = None,
+    ) -> str:
+        """Register a chart and return the line that tells the model how to show it.
+
+        Returns "" when there is too little to draw (a chart of one point says nothing).
+        """
+        kept = [(name, tone, values) for name, tone, values in series if any(values)]
+        if len(categories) < 2 or not kept:
+            return ""
+        digest = hashlib.sha1(f"{title}|{categories}".encode()).hexdigest()[:6]
+        chart_id = f"chart_{len(self.charts) + 1}{digest}"
+        self.charts[chart_id] = {
+            "id": chart_id,
+            "kind": kind,
+            "title": title,
+            "subtitle": subtitle,
+            "unit": unit,
+            "categories": categories,
+            "series": [{"name": n, "tone": t, "values": v} for n, t, v in kept],
+        }
+        return (
+            f'\nChart ready: "{title}". To show it, put [chart:{chart_id}] on its own line '
+            "in your answer."
+        )
 
     def seed(self, citation: dict[str, Any]) -> None:
         """Allow an id cited (and verified) earlier in the same conversation."""
@@ -78,7 +115,10 @@ CHAT_TOOL_SPECS: list[dict[str, Any]] = [
         "Deployments matching filters, newest first.",
         {
             "service": _SERVICE,
-            "provider": {"type": "string", "enum": ["vercel", "railway", "github"]},
+            "provider": {
+                "type": "string",
+                "description": "vercel, railway, render, fly, netlify, cloudflare or aws",
+            },
             "status": {
                 "type": "string",
                 "enum": ["queued", "building", "ready", "failed", "canceled"],
@@ -103,6 +143,14 @@ CHAT_TOOL_SPECS: list[dict[str, Any]] = [
             "since_hours": _HOURS,
         },
         ["query"],
+    ),
+    _function(
+        "deploy_trend",
+        "Deploy counts over time (ready, failed, other), bucketed by hour for windows up "
+        "to 48 hours and by day beyond that. Use it for questions about trends, activity "
+        "or how deploys have been going. Comes with a chart.",
+        {"service": _SERVICE, "since_hours": _HOURS},
+        [],
     ),
     _function(
         "list_incidents",
@@ -440,7 +488,113 @@ class ChatTools(InvestigatorTools):
         truncated = len(rows) == MAX_STATS_DEPLOYS
         header = f"Deploy stats over the last {hours} hours"
         header += f" (first {MAX_STATS_DEPLOYS} deploys only)" if truncated else ""
-        return f"{header}, most failures first:\n" + json.dumps(stats, indent=1)
+        shown = stats[:MAX_CHART_BARS]
+        chart = self.ledger.add_chart(
+            "bars",
+            "Deploys by service",
+            "deploys",
+            [item["service"] for item in shown],
+            _status_series([item["by_status"] for item in shown]),
+            subtitle=_window(hours),
+        )
+        return f"{header}, most failures first:\n" + json.dumps(stats, indent=1) + chart
+
+    async def deploy_trend(self, service: str | None = None, since_hours: str | None = None) -> str:
+        hours = _int(since_hours, DEFAULT_HOURS, MAX_HOURS)
+        now = utcnow()
+        query = select(Deployment).where(Deployment.started_at >= now - timedelta(hours=hours))
+        scoped = await self._scoped(query, Deployment.service_id, service)
+        if isinstance(scoped, str):
+            return scoped
+        rows = (
+            await self._session.scalars(
+                scoped.order_by(Deployment.started_at).limit(MAX_STATS_DEPLOYS)
+            )
+        ).all()
+        if not rows:
+            return f"No deployments in the last {hours} hours."
+        hourly = hours <= 48
+        step = timedelta(hours=1) if hourly else timedelta(days=1)
+        start = (now - timedelta(hours=hours)).replace(minute=0, second=0, microsecond=0)
+        if not hourly:
+            start = start.replace(hour=0)
+        buckets: list[dict[str, int]] = []
+        labels: list[str] = []
+        at = start
+        while at <= now and len(labels) < MAX_TREND_BUCKETS:
+            labels.append(f"{at:%H:00}" if hourly else f"{at:%b} {at.day}")
+            buckets.append({})
+            at += step
+        for deployment in rows:
+            index = min(int((ensure_utc(deployment.started_at) - start) / step), len(buckets) - 1)
+            if index >= 0:
+                bucket = buckets[index]
+                bucket[deployment.status] = bucket.get(deployment.status, 0) + 1
+        lines = [
+            f"{label}: " + (", ".join(f"{n} {status}" for status, n in sorted(b.items())) or "none")
+            for label, b in zip(labels, buckets, strict=True)
+        ]
+        scope = f" for {service}" if service else ""
+        chart = self.ledger.add_chart(
+            "bars",
+            f"Deploys per {'hour' if hourly else 'day'}{scope}",
+            "deploys",
+            labels,
+            _status_series(buckets),
+            subtitle=f"{_window(hours)} · UTC",
+        )
+        return (
+            f"Deploys per {'hour' if hourly else 'day'} over the last {hours} hours (UTC), "
+            f"{len(rows)} in total:\n" + "\n".join(lines) + chart
+        )
+
+    async def get_health_history(self, service_id: str) -> str:
+        text = await super().get_health_history(service_id)
+        service = await self._session.scalar(
+            select(Service)
+            .where(or_(Service.id == service_id, Service.name == service_id))
+            .limit(1)
+        )
+        if service is None:
+            return text
+        checks = (
+            await self._session.scalars(
+                select(HealthCheck)
+                .where(HealthCheck.service_id == service.id)
+                .order_by(HealthCheck.checked_at.desc())
+                .limit(30)
+            )
+        ).all()
+        checks = list(reversed(checks))
+        return text + self.ledger.add_chart(
+            "line",
+            f"Response time of {service.name}",
+            "ms",
+            [f"{check.checked_at:%H:%M}" for check in checks],
+            [
+                (
+                    "Response time",
+                    "info",
+                    [check.latency_ms if check.ok else None for check in checks],
+                )
+            ],
+            subtitle=f"last {len(checks)} health checks · failed checks leave a gap · UTC",
+        )
+
+
+def _window(hours: int) -> str:
+    return f"last {hours} hours" if hours <= 48 else f"last {round(hours / 24)} days"
+
+
+def _status_series(rows: list[dict[str, int]]) -> list[tuple[str, str, list[float | None]]]:
+    """Ready, failed and everything else, one value per row of status counts."""
+    ready = [float(row.get(FINISHED_GOOD, 0)) for row in rows]
+    failed = [float(row.get(FINISHED_BAD, 0)) for row in rows]
+    other = [
+        float(sum(n for status, n in row.items() if status not in (FINISHED_GOOD, FINISHED_BAD)))
+        for row in rows
+    ]
+    return [("Ready", "ok", ready), ("Failed", "err", failed), ("Other", "muted", other)]
 
 
 def _service_stats(deploys: list[Deployment], hours: int) -> dict[str, Any]:

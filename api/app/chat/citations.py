@@ -1,5 +1,8 @@
 """Inline citations in chat answers.
 
+A chart is placed the same way, as `[chart:<id>]`, and is kept only if a tool built a
+chart with that id during this answer.
+
 The model cites what it saw as `[deploy:<id>]`, `[log:<id>]`, `[commit:<sha>]`,
 `[incident:<id>]` or `[service:<id>]`. Each one is checked against the ledger: a
 verified marker is rewritten to its canonical id and described from the database;
@@ -28,6 +31,8 @@ BARE_LOG = re.compile(r"^log_[0-9a-f]{10}$")
 # Made-up marker types such as "[deploy_stats:0]" are removed.
 STRAY = re.compile(r"\[([a-z][a-z_]{2,30}):[^\]\s]{1,80}\]")
 TYPES = ("deploy", "log", "commit", "incident", "service")
+CHART = re.compile(r"\s*\[chart:\s*([^\]\s]{1,40})\s*\]\s*")
+MAX_CHARTS = 3
 # Tool names cited as if they were sources ("[deploy_stats]") are removed too.
 TOOL_REF = re.compile(
     r"\[(?:" + "|".join(spec["function"]["name"] for spec in CHAT_TOOL_SPECS) + r")\]"
@@ -37,10 +42,12 @@ MAX_DETAIL_CHARS = 200
 
 async def resolve(
     session: AsyncSession, content: str, ledger: ChatLedger
-) -> tuple[str, list[dict[str, Any]]]:
-    """Return the answer with only verified, canonical markers, and their descriptions."""
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return the answer with only verified markers, their descriptions, and its charts."""
     content = GROUP.sub(_split_group, content.translate(BRACKETS))
-    content = STRAY.sub(lambda m: m.group(0) if m.group(1) in TYPES else "", content)
+    content = STRAY.sub(
+        lambda m: m.group(0) if m.group(1) in TYPES or m.group(1) == "chart" else "", content
+    )
     content = TOOL_REF.sub("", content)
     citations: dict[tuple[str, str], dict[str, Any]] = {}
     replacements: dict[str, str] = {}
@@ -63,7 +70,26 @@ async def resolve(
     # whitespace but a newline, including the narrow no-break spaces some models emit.
     cleaned = re.sub(r"[^\S\n]+([.,;:)])", r"\1", cleaned)
     cleaned = re.sub(r"[^\S\n]{2,}", " ", cleaned).strip()
-    return cleaned, list(citations.values())
+    cleaned, charts = _place_charts(cleaned, ledger)
+    return cleaned, list(citations.values()), charts
+
+
+def _place_charts(content: str, ledger: ChatLedger) -> tuple[str, list[dict[str, Any]]]:
+    """Keep each chart a tool really built, once, on a line of its own; drop the rest."""
+    charts: dict[str, dict[str, Any]] = {}
+
+    def _swap(match: re.Match[str]) -> str:
+        chart_id = match.group(1).strip("`'\"")
+        chart = ledger.charts.get(chart_id)
+        if chart is None or chart_id in charts or len(charts) >= MAX_CHARTS:
+            return " "
+        charts[chart_id] = chart
+        return f"\n\n[chart:{chart_id}]\n\n"
+
+    placed = CHART.sub(_swap, content)
+    placed = re.sub(r"\n{3,}", "\n\n", placed)
+    placed = re.sub(r"[^\S\n]+([.,;:)])", r"\1", placed)
+    return placed.strip(), list(charts.values())
 
 
 def _split_group(match: re.Match[str]) -> str:
