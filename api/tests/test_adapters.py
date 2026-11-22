@@ -146,7 +146,53 @@ async def test_vercel_build_logs_handle_both_event_shapes():
     assert [line.level for line in lines] == ["info", "info", "warn", "error", "error"]
     assert lines[1].message == "Installing dependencies..."
     assert lines[-1].message.startswith("Error: Command")
-    assert await adapter.get_logs(ref, "runtime") == []  # not a Vercel capability here
+
+
+@respx.mock
+async def test_vercel_runtime_logs_are_read_from_the_stream():
+    records = [
+        {"source": "delimiter", "timestampInMs": 1795082400000, "message": ""},
+        {
+            "source": "serverless",
+            "level": "error",
+            "timestampInMs": 1795082402000,
+            "message": "TypeError: Cannot read properties of undefined\n",
+        },
+        {
+            "source": "request",
+            "level": "info",
+            "timestampInMs": "1795082401000",
+            "message": "",
+            "requestMethod": "GET",
+            "requestPath": "/api/cart",
+            "responseStatusCode": "500",
+        },
+        {
+            "source": "serverless",
+            "level": "warning",
+            "timestampInMs": 1795082403000,
+            "message": "slow",
+        },
+    ]
+    stream = "\n".join([json.dumps(record) for record in records] + ["not json", ""])
+    route = respx.get(
+        "https://api.vercel.com/v1/projects/prj_1/deployments/dpl_1/runtime-logs"
+    ).respond(text=stream)
+    ref = DeploymentRef("dpl_1", ServiceRef("prj_1", "web"))
+    lines = await VercelAdapter(TOKEN, {"team_id": "team_9"}).get_logs(ref, "runtime")
+    assert route.calls.last.request.url.params["teamId"] == "team_9"
+    assert [(line.level, line.message) for line in lines] == [
+        ("error", "GET /api/cart → 500"),
+        ("error", "TypeError: Cannot read properties of undefined"),
+        ("warn", "slow"),
+    ]
+
+    # Expired logs are an empty answer, not an error; a bad token still is one.
+    route.respond(410)
+    assert await VercelAdapter(TOKEN).get_logs(ref, "runtime") == []
+    route.respond(403)
+    with pytest.raises(ProviderError):
+        await VercelAdapter(TOKEN).get_logs(ref, "runtime")
 
 
 def test_vercel_webhook_signature_and_normalization():

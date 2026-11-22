@@ -116,7 +116,10 @@ async def _sync(
         else utcnow() - FIRST_SYNC_WINDOW
     )
     provider, integration_id = integration.provider, integration.id
-    capabilities = set(integration.capabilities)
+    # An adapter can gain abilities in a release; keep the stored list in step with it.
+    capabilities = set(adapter.capabilities)
+    if set(integration.capabilities) != capabilities:
+        integration.capabilities = sorted(capabilities)
     events: list[RawEventIn] = []
     skipped: list[str] = []
 

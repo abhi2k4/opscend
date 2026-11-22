@@ -12,8 +12,8 @@ from app.incidents import rules
 from app.incidents.health import run_health_checks
 from app.ingest.normalizer import apply_batch
 from app.integrations.base import DeploymentIn, NormalizedBatch
-from app.models import Deployment, HealthCheck, Incident
-from tests.conftest import make_deployment, make_service
+from app.models import Deployment, HealthCheck, Incident, Investigation
+from tests.conftest import _clear_caches, drain_jobs, make_deployment, make_service
 
 PROJECT = "prj_QmT4wq1storefront"
 
@@ -200,3 +200,74 @@ async def test_a_service_that_was_never_healthy_is_down_but_not_an_incident(data
     async with session_scope() as session:
         assert await incidents(session) == []
         assert (await session.scalars(select(HealthCheck))).all()[-1].ok is False
+
+
+# ───────────────────────────── automatic investigation
+
+
+def _with_ai(env, **settings: str) -> None:
+    """Configure a (fake) LLM key and stub the model with one that reports straight away."""
+    from app.core import queue as queue_module
+    from app.investigator import orchestrator
+    from app.main import JOBS
+    from tests.test_investigator import FakeLLM, report, turn
+
+    env.setenv("GROQ_API_KEY", "gsk_fake_key_for_tests")
+    for key, value in settings.items():
+        env.setenv(key, value)
+    _clear_caches()
+    # These tests drive the normalizer directly, so there is no app to start the queue.
+    env.setattr(queue_module, "_queue", queue_module.InlineQueue(JOBS))
+    env.setattr(
+        orchestrator,
+        "build_llm",
+        lambda: FakeLLM(lambda request: turn(report(inconclusive=True, culprit_commit_sha=None))),
+    )
+
+
+async def _investigations(session) -> list[Investigation]:
+    session.expire_all()
+    return list((await session.scalars(select(Investigation))).all())
+
+
+async def test_a_failed_deploy_is_investigated_without_a_click(database, env):
+    _with_ai(env)
+    async with session_scope() as session:
+        await make_service(session)
+        for _ in range(2):  # a replayed event must not start a second run
+            await apply_batch(session, "vercel", deploy("dpl_1", "failed", 5))
+        await drain_jobs()
+        [incident] = await incidents(session)
+        incident_id, deployment_id = incident.id, incident.deployment_id
+        [investigation] = await _investigations(session)
+        assert investigation.incident_id == incident_id
+        assert investigation.deployment_id == deployment_id
+        assert investigation.status == "completed"
+
+
+async def test_automatic_investigation_needs_a_key_and_can_be_switched_off(database, env):
+    async with session_scope() as session:  # no key configured
+        await make_service(session)
+        await apply_batch(session, "vercel", deploy("dpl_1", "failed", 5))
+        assert len(await incidents(session)) == 1
+        assert await _investigations(session) == []
+
+    _with_ai(env, OPSCEND_AUTO_INVESTIGATE="0")
+    async with session_scope() as session:
+        await apply_batch(session, "vercel", deploy("dpl_2", "ready", 4))
+        await apply_batch(session, "vercel", deploy("dpl_3", "failed", 3))
+        await drain_jobs()
+        assert len(await incidents(session)) == 2
+        assert await _investigations(session) == []
+
+
+async def test_automatic_investigation_stops_at_the_daily_limit(database, env):
+    _with_ai(env, OPSCEND_AUTO_INVESTIGATE_DAILY_LIMIT="1")
+    async with session_scope() as session:
+        await make_service(session)
+        await apply_batch(session, "vercel", deploy("dpl_1", "failed", 5))
+        await apply_batch(session, "vercel", deploy("dpl_2", "ready", 4))
+        await apply_batch(session, "vercel", deploy("dpl_3", "failed", 3))
+        await drain_jobs()
+        assert len(await incidents(session)) == 2
+        assert len(await _investigations(session)) == 1

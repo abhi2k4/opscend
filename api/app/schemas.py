@@ -184,6 +184,28 @@ class CommitDiff(Schema):
     files: list[DiffFile]
 
 
+class ChangedFile(Schema):
+    filename: str
+    status: Literal["added", "modified", "removed", "renamed"]
+    additions: int
+    deletions: int
+
+
+class DeploymentChanges(Schema):
+    """What separates a deployment from the last one of its service that went live."""
+
+    baseline: Deployment | None
+    same_commit: bool
+    failed_between: int
+    duration_delta_ms: int | None
+    commits: list[Commit]
+    files: list[ChangedFile]
+    source: Literal["compare", "history", "none"]
+    truncated: bool
+    note: str | None
+    compare_url: str | None
+
+
 class Incident(Schema):
     id: str
     service_id: str
@@ -311,6 +333,29 @@ class InvestigationStep(Schema):
     status: Literal["running", "ok", "error"]
 
 
+class InvestigationFeedback(Schema):
+    rating: Literal["up", "down"]
+    note: str | None
+    at: datetime
+
+
+class InvestigationFeedbackIn(BaseModel):
+    """`rating: null` clears the feedback."""
+
+    rating: Literal["up", "down"] | None
+    note: str | None = Field(None, max_length=500)
+
+
+class InvestigationStats(Schema):
+    """How the reports have been judged so far."""
+
+    completed: int
+    inconclusive: int
+    rated: int
+    helpful: int
+    not_helpful: int
+
+
 class Investigation(Schema):
     id: str
     deployment_id: str | None
@@ -324,6 +369,7 @@ class Investigation(Schema):
     created_at: datetime
     finished_at: datetime | None
     report: InvestigationReport | None
+    feedback: InvestigationFeedback | None
     steps: list[InvestigationStep]
 
 

@@ -1,5 +1,6 @@
 """Vercel adapter (REST API, https://vercel.com/docs/rest-api)."""
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -28,6 +29,8 @@ from app.integrations.registry import register
 from app.schemas import Capability, ConfigField, DeployStatus, LogKind, LogLevel, ProviderManifest
 
 API = "https://api.vercel.com"
+# The runtime-log endpoint is a stream that can stay open; read it for at most this long.
+RUNTIME_LOG_SECONDS = 6.0
 
 _STATE: dict[str, DeployStatus] = {
     "QUEUED": "queued",
@@ -62,13 +65,14 @@ class VercelAdapter(HttpAdapter):
             Capability.LIST_SERVICES,
             Capability.LIST_DEPLOYS,
             Capability.BUILD_LOGS,
+            Capability.RUNTIME_LOGS,
             Capability.WEBHOOKS,
         }
     )
     manifest: ClassVar[ProviderManifest] = ProviderManifest(
         provider="vercel",
         name="Vercel",
-        description="Projects, deployments and build logs from the Vercel REST API.",
+        description="Projects, deployments, build and runtime logs from the Vercel REST API.",
         availability="available",
         capabilities=sorted(capabilities),
         token_label="Access token",
@@ -153,8 +157,8 @@ class VercelAdapter(HttpAdapter):
     async def get_logs(
         self, deployment: DeploymentRef, kind: LogKind, limit: int = 500
     ) -> list[LogLineIn]:
-        if kind != "build":
-            return []
+        if kind == "runtime":
+            return await self._runtime_logs(deployment, limit)
         events = await self._get(
             f"/v3/deployments/{deployment.external_id}/events",
             builds=1,
@@ -163,6 +167,44 @@ class VercelAdapter(HttpAdapter):
         )
         lines = [line for event in events if (line := _log_line(event)) is not None]
         return lines[-limit:]
+
+    async def _runtime_logs(self, deployment: DeploymentRef, limit: int) -> list[LogLineIn]:
+        """Read what the runtime-log stream sends in a few seconds (one JSON object per line)."""
+        params = {"teamId": team_id} if (team_id := self.config.get("team_id")) else {}
+        path = (
+            f"/v1/projects/{deployment.service.external_id}"
+            f"/deployments/{deployment.external_id}/runtime-logs"
+        )
+        lines: list[LogLineIn] = []
+
+        async def read() -> None:
+            async with self.client.stream(
+                "GET",
+                f"{API}{path}",
+                params=params,
+                headers={"Authorization": f"Bearer {self._token}"},
+            ) as response:
+                if response.status_code in (401, 403):
+                    raise ProviderError("Vercel rejected the token (check it and the team id)")
+                if response.status_code in (404, 410):
+                    return  # the deployment is gone or its logs have expired
+                if response.status_code >= 400:
+                    raise ProviderError(
+                        f"Vercel API returned HTTP {response.status_code} for {path}"
+                    )
+                async for text in response.aiter_lines():
+                    if (line := _runtime_line(text)) is not None:
+                        lines.append(line)
+                    if len(lines) >= limit:
+                        return
+
+        try:
+            await asyncio.wait_for(read(), RUNTIME_LOG_SECONDS)
+        except TimeoutError:
+            pass  # the stream was still open: keep what arrived
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"Vercel request failed: {type(exc).__name__}") from exc
+        return sorted(lines, key=lambda line: line.ts)
 
     def parse_webhook(self, headers: dict[str, str], body: bytes) -> list[RawEventIn]:
         signature = lower_headers(headers).get("x-vercel-signature", "")
@@ -256,3 +298,34 @@ def _log_line(event: dict[str, Any]) -> LogLineIn | None:
     if level == "info" and text.lstrip().lower().startswith(("warn", "warning")):
         level = "warn"
     return LogLineIn(ts=ts, level=level, message=text.rstrip("\n"))
+
+
+_RUNTIME_LEVEL: dict[str, LogLevel] = {
+    "trace": "debug",
+    "debug": "debug",
+    "info": "info",
+    "warning": "warn",
+    "error": "error",
+    "fatal": "error",
+}
+
+
+def _runtime_line(text: str) -> LogLineIn | None:
+    """One runtime-log record. Request rows without a message become `METHOD path → status`."""
+    try:
+        record = json.loads(text)
+        ts = from_epoch_ms(float(record["timestampInMs"]))
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(record, dict) or ts is None or record.get("source") == "delimiter":
+        return None
+    message = str(record.get("message") or "").rstrip("\n")
+    status = str(record.get("responseStatusCode") or "")
+    if not message:
+        if not record.get("requestPath"):
+            return None
+        message = f"{record.get('requestMethod') or 'GET'} {record['requestPath']} → {status}"
+    level = _RUNTIME_LEVEL.get(str(record.get("level") or "").lower(), "info")
+    if level == "info" and status.isdigit() and int(status) >= 500:
+        level = "error"
+    return LogLineIn(ts=ts, level=level, message=message)

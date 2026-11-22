@@ -1,12 +1,13 @@
 "use client";
 
-import { Search, WrapText } from "lucide-react";
+import { ArrowUpRight, Search, WrapText } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Empty, levelColor, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
-import { clock, cn } from "@/lib/format";
+import { clock, cn, duration, firstLine, shortSha, timeAgo } from "@/lib/format";
 import { highlight } from "@/lib/highlight";
-import type { CommitDiff, LogKind, LogLevel, LogLine } from "@/lib/types";
+import type { CommitDiff, DeploymentChanges, LogKind, LogLevel, LogLine } from "@/lib/types";
 
 const LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
 
@@ -158,6 +159,105 @@ export function DiffView({ deploymentId }: { deploymentId: string }) {
         </div>
       ))}
       {data.files.length === 0 && <Empty title="This commit changed no files" />}
+    </div>
+  );
+}
+
+const FILE_MARK = { added: ["A", "text-ok"], modified: ["M", "text-muted"], removed: ["D", "text-err"], renamed: ["R", "text-info"] } as const;
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0 bg-surface px-4 py-3">
+      <div className="label-mono mb-1">{label}</div>
+      <div className="truncate text-[13px]">{children}</div>
+    </div>
+  );
+}
+
+/** Everything between this deploy and the last one of the service that went live. */
+export function ChangesView({ deploymentId }: { deploymentId: string }) {
+  const { data, error } = useApi<DeploymentChanges>(`/deployments/${deploymentId}/changes`);
+  if (error) return <Empty title="Could not compare this deploy">{error.message}</Empty>;
+  if (!data) return <div className="p-4"><Skeleton className="h-40" /></div>;
+  if (!data.baseline) return <Empty title="Nothing to compare against">{data.note}</Empty>;
+
+  const base = data.baseline;
+  const delta = data.duration_delta_ms;
+  const added = data.files.reduce((n, f) => n + f.additions, 0);
+  const removed = data.files.reduce((n, f) => n + f.deletions, 0);
+
+  return (
+    <div className="p-3">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line lg:grid-cols-4">
+        <Fact label="Last good deploy">
+          <Link href={`/console/deployments/${base.id}`} className="inline-flex items-center gap-1.5 font-mono text-[12px] hover:text-accent">
+            {shortSha(base.commit_sha)} · {timeAgo(base.started_at)} <ArrowUpRight size={11} />
+          </Link>
+        </Fact>
+        <Fact label="Commits since">
+          <span className="font-mono text-[12px]">{data.same_commit ? "0 (same commit)" : `${data.commits.length}${data.truncated ? "+" : ""}`}</span>
+        </Fact>
+        <Fact label="Failed attempts between">
+          <span className="font-mono text-[12px]">{data.failed_between}</span>
+        </Fact>
+        <Fact label="Duration vs last good">
+          <span className={cn("font-mono text-[12px]", delta !== null && delta > 0 && "text-warn")}>
+            {delta === null ? "—" : delta === 0 ? "same" : `${delta > 0 ? "+" : "−"}${duration(Math.abs(delta))}`}
+          </span>
+        </Fact>
+      </div>
+
+      {data.note && <p className={cn("mt-3 rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed", data.same_commit ? "border-warn/30 bg-warn/[0.06]" : "border-line text-muted")}>{data.note}</p>}
+
+      {data.commits.length > 0 && (
+        <>
+          <div className="label-mono mb-2 mt-5 flex items-center justify-between">
+            <span>Commits, newest first</span>
+            {data.compare_url && (
+              <a href={data.compare_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-muted hover:text-fg">
+                compare on GitHub <ArrowUpRight size={11} />
+              </a>
+            )}
+          </div>
+          <ul className="overflow-hidden rounded-lg border border-line">
+            {data.commits.map((c) => (
+              <li key={c.sha} className="flex items-center gap-3 border-b border-line-soft px-3 py-2 text-[12.5px] last:border-0">
+                {c.url ? (
+                  <a href={c.url} target="_blank" rel="noreferrer" className="shrink-0 font-mono text-[11.5px] text-accent hover:underline">{shortSha(c.sha)}</a>
+                ) : (
+                  <span className="shrink-0 font-mono text-[11.5px] text-accent">{shortSha(c.sha)}</span>
+                )}
+                <span className="min-w-0 flex-1 truncate">{firstLine(c.message)}</span>
+                <span className="hidden shrink-0 text-muted sm:block">{c.author}</span>
+                <span className="w-16 shrink-0 text-right font-mono text-[11px] text-faint">{timeAgo(c.committed_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {data.files.length > 0 && (
+        <>
+          <div className="label-mono mb-2 mt-5 flex items-center justify-between">
+            <span>{data.files.length} files changed</span>
+            <span>
+              <span className="text-ok">+{added}</span> <span className="text-err">−{removed}</span>
+            </span>
+          </div>
+          <ul className="overflow-hidden rounded-lg border border-line font-mono text-[11.5px]">
+            {data.files.map((f) => (
+              <li key={f.filename} className="flex items-center gap-3 border-b border-line-soft px-3 py-1.5 last:border-0">
+                <span className={cn("w-3 shrink-0", FILE_MARK[f.status][1])} title={f.status}>{FILE_MARK[f.status][0]}</span>
+                <span className="min-w-0 flex-1 truncate text-fg/90">{f.filename}</span>
+                <span className="text-ok">+{f.additions}</span>
+                <span className="w-10 text-right text-err">−{f.deletions}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {!data.same_commit && data.commits.length === 0 && !data.note && <p className="mt-4 text-[13px] text-muted">No commits are on record between these two deploys.</p>}
     </div>
   );
 }

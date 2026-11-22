@@ -111,6 +111,15 @@ def investigation_out(investigation: models.Investigation) -> schemas.Investigat
         created_at=investigation.created_at,
         finished_at=investigation.finished_at,
         report=investigation.report,
+        feedback=(
+            schemas.InvestigationFeedback(
+                rating=investigation.feedback_rating,
+                note=investigation.feedback_note,
+                at=investigation.feedback_at,
+            )
+            if investigation.feedback_rating and investigation.feedback_at
+            else None
+        ),
         steps=[schemas.InvestigationStep.model_validate(step) for step in investigation.steps],
     )
 

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app import models, schemas
 from app.integrations.base import ProviderError
 from app.investigator.service import start_investigation
-from app.services import diffs, logs
+from app.services import changes, diffs, logs
 from app.services.presenters import (
     deployment_out,
     find_commit,
@@ -83,6 +83,13 @@ async def get_diff(deployment_id: str, session: SessionDep) -> schemas.CommitDif
     if diff is None:
         raise HTTPException(404, "No diff available for this commit (connect GitHub to fetch it)")
     return diff
+
+
+@router.get("/{deployment_id}/changes")
+async def get_changes(deployment_id: str, session: SessionDep) -> schemas.DeploymentChanges:
+    """Commits, files and timing that separate this deploy from the last one that went live."""
+    deployment = await get_or_404(session, models.Deployment, deployment_id)
+    return await changes.get_changes(session, deployment)
 
 
 @router.post("/{deployment_id}/investigate")

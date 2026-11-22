@@ -148,6 +148,33 @@ export interface CommitDiff {
   }[];
 }
 
+export interface ChangedFile {
+  filename: string;
+  status: "added" | "modified" | "removed" | "renamed";
+  additions: number;
+  deletions: number;
+}
+
+/** What separates a deployment from the last one of its service that went live. */
+export interface DeploymentChanges {
+  /** The last deploy that went live before this one; null when there is none on record. */
+  baseline: Deployment | null;
+  /** True when both deploys built the same commit: the code did not change. */
+  same_commit: boolean;
+  /** Other failed deploys between the baseline and this one. */
+  failed_between: number;
+  /** This deploy's duration minus the baseline's. */
+  duration_delta_ms: number | null;
+  /** Newest first. */
+  commits: Commit[];
+  files: ChangedFile[];
+  /** "compare": exact range from the source host. "history": commits Opscend has stored. */
+  source: "compare" | "history" | "none";
+  truncated: boolean;
+  note: string | null;
+  compare_url: string | null;
+}
+
 export interface Incident {
   id: string;
   service_id: string;
@@ -236,7 +263,29 @@ export interface Investigation {
   created_at: string;
   finished_at: string | null;
   report: InvestigationReport | null;
+  /** The reader's verdict on the report, if they gave one. */
+  feedback: InvestigationFeedback | null;
   steps: InvestigationStep[];
+}
+
+export interface InvestigationFeedback {
+  rating: "up" | "down";
+  note: string | null;
+  at: string;
+}
+
+/** Body of PUT /investigations/{id}/feedback. `rating: null` clears it. */
+export interface InvestigationFeedbackIn {
+  rating: "up" | "down" | null;
+  note?: string | null;
+}
+
+export interface InvestigationStats {
+  completed: number;
+  inconclusive: number;
+  rated: number;
+  helpful: number;
+  not_helpful: number;
 }
 
 // ───────────────────────────── ask opscend (chat)

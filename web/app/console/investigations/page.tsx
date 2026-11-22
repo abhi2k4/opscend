@@ -7,17 +7,33 @@ import { ButtonLink, ConfidenceMeter, Dot, Empty, Panel, Skeleton, Tag } from "@
 import { Sherlog } from "@/components/ui/sherlog";
 import { useApi } from "@/lib/api";
 import { compact, duration, shortSha, timeAgo } from "@/lib/format";
-import type { Investigation } from "@/lib/types";
+import type { Investigation, InvestigationStats } from "@/lib/types";
 
 const STATUS_COLOR = { queued: "var(--muted)", running: "var(--accent)", completed: "var(--ok)", failed: "var(--err)" } as const;
 
 export default function InvestigationsPage() {
   const { data, error } = useApi<Investigation[]>("/investigations", { refreshInterval: 5000 });
+  const stats = useApi<InvestigationStats>("/investigations/stats", { refreshInterval: 15000 }).data;
   const now = useNow();
 
   return (
     <>
       <PageHeader title="Investigations" description="Every run of the AI investigator, with its trace and cited report." />
+      {stats && stats.completed > 0 && (
+        <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
+          {[
+            ["Reports", String(stats.completed)],
+            ["Inconclusive", String(stats.inconclusive)],
+            ["Rated", `${stats.rated} of ${stats.completed}`],
+            ["Marked right", stats.rated ? `${stats.helpful} of ${stats.rated}` : "not rated yet"],
+          ].map(([label, value]) => (
+            <div key={label} className="bg-surface px-4 py-3">
+              <div className="label-mono mb-1">{label}</div>
+              <div className="font-mono text-[13px]">{value}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <Panel>
         {!data && !error && <div className="space-y-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>}
         {error && !data && <Empty title="Could not load investigations">{error.message}</Empty>}
@@ -39,6 +55,7 @@ export default function InvestigationsPage() {
               <div className="mt-0.5 truncate text-[12.5px] text-muted">{inv.report?.summary ?? inv.report?.likely_cause ?? inv.error ?? "In progress…"}</div>
             </div>
             <div className="flex items-center gap-5 font-mono text-[11px] text-muted">
+              {inv.feedback && <span className={inv.feedback.rating === "up" ? "text-ok" : "text-err"}>{inv.feedback.rating === "up" ? "right" : "wrong"}</span>}
               {inv.report && <span className="hidden sm:block"><ConfidenceMeter confidence={inv.report.confidence} /></span>}
               <span className="hidden w-14 text-right md:block">{compact(inv.tokens_used)} tok</span>
               <span className="hidden w-12 text-right md:block">{duration(inv.duration_ms)}</span>

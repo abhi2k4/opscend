@@ -13,6 +13,7 @@ from app.core.time import parse_iso, utcnow
 from app.integrations.base import (
     AccountInfo,
     CommitIn,
+    Comparison,
     DeploymentIn,
     DeploymentRef,
     HttpAdapter,
@@ -29,6 +30,7 @@ from app.integrations.base import (
 from app.integrations.registry import register
 from app.schemas import (
     Capability,
+    ChangedFile,
     CommitDiff,
     ConfigField,
     DiffFile,
@@ -142,6 +144,20 @@ class GitHubAdapter(HttpAdapter):
             message=commit.get("message", ""),
             author=(commit.get("author") or {}).get("name") or "unknown",
             files=[_diff_file(item) for item in data.get("files", [])],
+        )
+
+    async def compare(self, repo: str, base: str, head: str) -> Comparison:
+        data = await self._get(f"/repos/{repo}/compare/{base}...{head}", per_page=100)
+        commits = [_commit_from_api(repo, item) for item in data.get("commits") or []]
+        files = [
+            ChangedFile(**_diff_file(item).model_dump(exclude={"patch"}))
+            for item in data.get("files") or []
+        ]
+        return Comparison(
+            commits=commits,
+            files=files,
+            # GitHub returns at most 100 commits per page and 300 files in total.
+            truncated=data.get("total_commits", len(commits)) > len(commits) or len(files) >= 300,
         )
 
     def parse_webhook(self, headers: dict[str, str], body: bytes) -> list[RawEventIn]:

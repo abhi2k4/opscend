@@ -340,15 +340,31 @@ async def test_invented_evidence_is_dropped_and_confidence_downgraded(database):
     assert "dropped 4 evidence ref(s)" in investigation.steps[-1].output_summary
 
 
-async def test_conclusion_without_any_verified_evidence_becomes_low_confidence(database):
+async def test_conclusion_without_any_verified_evidence_becomes_inconclusive(database):
     ids = await scene()
     llm = FakeLLM(turn(report(evidence=[{"type": "log", "ref": "log_made_up", "quote": "x"}])))
     await run_investigation(ids["investigation"], llm)
     investigation = await result(ids["investigation"])
     assert investigation.report["evidence"] == []
+    assert investigation.report["inconclusive"] is True
     assert investigation.report["confidence"] == "low"
-    # The target's own commit was given to the model in the task, so naming it is allowed.
-    assert investigation.report["culprit_commit_sha"] == SHA
+    # Nothing backs the conclusion, so it may not name a commit either.
+    assert investigation.report["culprit_commit_sha"] is None
+    assert investigation.report["missing"]
+
+
+async def test_a_cause_read_from_the_diff_alone_is_low_confidence(database):
+    """Citing only the commit means the model never saw the failure itself."""
+    ids = await scene()
+    llm = FakeLLM(
+        turn(report(evidence=[{"type": "commit", "ref": SHA, "quote": "renamed env var"}]))
+    )
+    await run_investigation(ids["investigation"], llm)
+    investigation = await result(ids["investigation"])
+    assert [e["type"] for e in investigation.report["evidence"]] == ["commit"]
+    assert investigation.report["inconclusive"] is False
+    assert investigation.report["confidence"] == "low"
+    assert "no log or health evidence" in investigation.steps[-1].output_summary
 
 
 @respx.mock

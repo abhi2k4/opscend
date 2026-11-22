@@ -1,11 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUpRight, Bot, ChevronRight, CircleHelp, FileCheck2, GitCommitHorizontal, HeartPulse, Lightbulb, Rocket, ScrollText, Wrench } from "lucide-react";
+import { ArrowUpRight, Bot, ChevronRight, CircleHelp, FileCheck2, GitCommitHorizontal, HeartPulse, Lightbulb, Rocket, ScrollText, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { mutate } from "swr";
 import { ConfidenceMeter, CopyButton, Mono, Spinner, Tag } from "@/components/ui/primitives";
 import { Sherlog } from "@/components/ui/sherlog";
+import { api } from "@/lib/api";
 import { cn, compact, duration, shortSha } from "@/lib/format";
 import type { EvidenceRef, Investigation, InvestigationReport, InvestigationStep } from "@/lib/types";
 
@@ -285,7 +287,83 @@ export function ReportView({ inv }: { inv: Investigation }) {
           <p className="mt-2 font-mono text-[10.5px] uppercase tracking-wider text-faint">Opscend is read-only. Apply this yourself.</p>
         </div>
       )}
+
+      <Feedback inv={inv} />
     </motion.div>
+  );
+}
+
+/** Thumbs up or down on a finished report, with an optional note on what was wrong. */
+function Feedback({ inv }: { inv: Investigation }) {
+  const rating = inv.feedback?.rating ?? null;
+  const [note, setNote] = useState(inv.feedback?.note ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(next: "up" | "down" | null, text?: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await api<Investigation>(`/investigations/${inv.id}/feedback`, { method: "PUT", json: { rating: next, note: text ?? null } });
+      await mutate(`/investigations/${inv.id}`, saved, { revalidate: false });
+      void mutate("/investigations/stats");
+      if (!next) setNote("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const choice = (value: "up" | "down", Icon: typeof ThumbsUp, label: string, tone: string) => (
+    <button
+      type="button"
+      aria-pressed={rating === value}
+      aria-label={label}
+      title={rating === value ? "Click again to clear" : label}
+      disabled={busy}
+      // Clicking the chosen thumb again clears the rating.
+      onClick={() => send(rating === value ? null : value, value === "down" ? note.trim() || undefined : undefined)}
+      className={cn(
+        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[12px] transition-colors disabled:opacity-50",
+        rating === value ? tone : "border-line bg-raised text-muted hover:border-[var(--line-strong)] hover:text-fg",
+      )}
+    >
+      <Icon size={12} /> {value === "up" ? "Right" : "Wrong"}
+    </button>
+  );
+
+  return (
+    <div className="mt-6 border-t border-line pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="label-mono mr-1">Was this right?</span>
+        {choice("up", ThumbsUp, "The report was right", "border-ok/40 bg-ok/[0.08] text-ok")}
+        {choice("down", ThumbsDown, "The report was wrong", "border-err/40 bg-err/[0.08] text-err")}
+        {rating && <span className="font-mono text-[11px] text-faint">saved</span>}
+        {error && <span className="text-[12px] text-err">{error}</span>}
+      </div>
+      {rating === "down" && (
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send("down", note.trim() || undefined);
+          }}
+        >
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={500}
+            placeholder="What was the real cause? (optional)"
+            aria-label="What was the real cause?"
+            className="h-8 min-w-0 flex-1 rounded-md border border-line bg-bg/50 px-2.5 text-[12.5px] outline-none placeholder:text-faint focus:border-[var(--line-strong)]"
+          />
+          <button type="submit" disabled={busy || note.trim() === (inv.feedback?.note ?? "")} className="h-8 rounded-md border border-line bg-raised px-3 text-[12px] hover:border-[var(--line-strong)] disabled:opacity-40">
+            Save note
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 
