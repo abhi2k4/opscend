@@ -198,6 +198,13 @@ class ChangedFile(Schema):
     status: Literal["added", "modified", "removed", "renamed"]
     additions: int
     deletions: int
+    # The file on the source host at the deployed commit, at `line` when one is known.
+    url: str | None = None
+    # True when the failure points at this file: the investigation names it, or it
+    # appears in the deployment's error logs. `suspect_reason` says which.
+    suspect: bool = False
+    suspect_reason: str | None = None
+    line: int | None = None
 
 
 class DeploymentChanges(Schema):

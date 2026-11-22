@@ -172,6 +172,13 @@ export interface ChangedFile {
   status: "added" | "modified" | "removed" | "renamed";
   additions: number;
   deletions: number;
+  /** The file on the source host at the deployed commit, at `line` when one is known. */
+  url: string | null;
+  /** True when the failure points at this file (see `suspect_reason`). */
+  suspect: boolean;
+  /** "named in the investigation" or "appears in the error logs". */
+  suspect_reason: string | null;
+  line: number | null;
 }
 
 /** What separates a deployment from the last one of its service that went live. */

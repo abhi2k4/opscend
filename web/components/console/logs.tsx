@@ -7,6 +7,7 @@ import { Empty, levelColor, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
 import { clock, cn, duration, firstLine, shortSha, timeAgo } from "@/lib/format";
 import { highlight } from "@/lib/highlight";
+import { FileTree } from "./file-tree";
 import type { CommitDiff, DeploymentChanges, LogKind, LogLevel, LogLine } from "@/lib/types";
 
 const LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
@@ -163,8 +164,6 @@ export function DiffView({ deploymentId }: { deploymentId: string }) {
   );
 }
 
-const FILE_MARK = { added: ["A", "text-ok"], modified: ["M", "text-muted"], removed: ["D", "text-err"], renamed: ["R", "text-info"] } as const;
-
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0 bg-surface px-4 py-3">
@@ -244,16 +243,7 @@ export function ChangesView({ deploymentId }: { deploymentId: string }) {
               <span className="text-ok">+{added}</span> <span className="text-err">−{removed}</span>
             </span>
           </div>
-          <ul className="overflow-hidden rounded-lg border border-line font-mono text-[11.5px]">
-            {data.files.map((f) => (
-              <li key={f.filename} className="flex items-center gap-3 border-b border-line-soft px-3 py-1.5 last:border-0">
-                <span className={cn("w-3 shrink-0", FILE_MARK[f.status][1])} title={f.status}>{FILE_MARK[f.status][0]}</span>
-                <span className="min-w-0 flex-1 truncate text-fg/90">{f.filename}</span>
-                <span className="text-ok">+{f.additions}</span>
-                <span className="w-10 text-right text-err">−{f.deletions}</span>
-              </li>
-            ))}
-          </ul>
+          <FileTree files={data.files} />
         </>
       )}
 
