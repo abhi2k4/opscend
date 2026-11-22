@@ -316,7 +316,7 @@ export interface InvestigationStats {
 
 // ───────────────────────────── ask opscend (chat)
 
-export type ChatCitationType = "deploy" | "log" | "commit" | "incident" | "service";
+export type ChatCitationType = "deploy" | "log" | "commit" | "incident" | "investigation" | "service";
 
 /** A verified inline citation. The answer text carries it as `[type:ref]`. */
 export interface ChatCitation {

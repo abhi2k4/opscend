@@ -17,7 +17,15 @@ from app.core.time import utcnow
 from app.integrations.base import LogLineIn
 from app.investigator.llm import LLMError, LLMResponse, _parse
 from app.investigator.tools import TOOL_SPECS
-from app.models import ChatMessage, ChatSession, Commit, HealthCheck, Incident, LogLine
+from app.models import (
+    ChatMessage,
+    ChatSession,
+    Commit,
+    HealthCheck,
+    Incident,
+    Investigation,
+    LogLine,
+)
 from app.services.logs import to_rows
 from app.services.retention import prune_old_data
 from tests.conftest import ADMIN, SECRET_TOKEN, drain_jobs, make_deployment, make_service
@@ -126,6 +134,10 @@ async def test_chat_tools_are_read_only_and_extend_the_investigators(t):
         "list_commits",
         "deploy_stats",
         "deploy_trend",
+        "health_stats",
+        "list_investigations",
+        "get_investigation",
+        "changes_since_last_good",
     }
     public = {
         name
@@ -176,7 +188,8 @@ async def test_search_logs_spans_deployments_escapes_wildcards_and_wraps_text(t)
 async def test_incidents_commits_services_and_stats(t):
     ids = await world()
 
-    incidents = json.loads(await t.call("list_incidents", {"service": "storefront-api"}))
+    listed = await t.call("list_incidents", {"service": "storefront-api"})
+    incidents = json.loads(listed.split("\n", 1)[1])
     assert [i["incident_id"] for i in incidents] == [ids["incident"]]
     assert ids["incident"] in t.ledger.incidents and ids["failed"] in t.ledger.deploys
     assert await t.call("list_incidents", {"status": "open"}) == "No incidents match those filters."
@@ -196,6 +209,134 @@ async def test_incidents_commits_services_and_stats(t):
     assert api["mean_time_to_recovery_minutes"] == 61.5
     assert api["last_failure"]["deployment_id"] == ids["failed"]
     assert api["avg_build_seconds"] == 90.0
+
+
+async def add_report(deployment_id: str, log_id: str, *, rating: str | None = None) -> str:
+    async with session_scope() as session:
+        investigation = Investigation(
+            deployment_id=deployment_id,
+            service_name="storefront-api",
+            model="m",
+            status="completed",
+            report={
+                "inconclusive": False,
+                "likely_cause": "The new Postgres host refuses connections.",
+                "confidence": "high",
+                "summary": "Commit moved DATABASE_URL to 10.0.0.4.",
+                "culprit_commit_sha": SHA,
+                "evidence": [
+                    {
+                        "type": "log",
+                        "ref": log_id,
+                        "deployment_id": deployment_id,
+                        "quote": "connect ECONNREFUSED 10.0.0.4:5432",
+                    }
+                ],
+                "suggested_fix": "Point DATABASE_URL back at the old host.",
+                "missing": None,
+            },
+            feedback_rating=rating,
+            feedback_note="wrong host" if rating == "down" else None,
+        )
+        session.add(investigation)
+        await session.commit()
+        return investigation.id
+
+
+async def first_error_log(deployment_id: str) -> str:
+    async with session_scope() as session:
+        return await session.scalar(
+            select(LogLine.id).where(
+                LogLine.deployment_id == deployment_id, LogLine.level == "error"
+            )
+        )
+
+
+async def test_investigation_reports_are_readable_and_citable(t):
+    ids = await world()
+    log_id = await first_error_log(ids["failed"])
+    report_id = await add_report(ids["failed"], log_id)
+
+    text = await t.call("get_investigation", {"deployment_id": ids["failed"]})
+    assert report_id in text and "new Postgres host" in text and "<untrusted_data" in text
+    assert report_id in t.ledger.investigations
+    assert log_id in t.ledger.logs and SHA in t.ledger.commits  # the report's evidence is citable
+
+    listed = await t.call("list_investigations", {"service": "storefront-api"})
+    assert report_id in listed and '"confidence": "high"' in listed
+    assert await t.call("list_investigations", {"rating": "down"}) == (
+        "No investigations match those filters."
+    )
+    assert "No investigation found" in await t.call(
+        "get_investigation", {"deployment_id": ids["web_ok"]}
+    )
+
+    content, cites, _ = await citations.resolve(
+        t._session, f"Postgres refused [investigation:{report_id}] [investigation:nope].", t.ledger
+    )
+    assert content == f"Postgres refused [investigation:{report_id}]."
+    assert cites[0]["label"] == "report · storefront-api · high"
+
+
+async def test_a_report_rated_wrong_is_flagged_to_the_model(t):
+    ids = await world()
+    await add_report(ids["failed"], await first_error_log(ids["failed"]), rating="down")
+    text = await t.call("get_investigation", {"deployment_id": ids["failed"]})
+    assert "rated this report as wrong: wrong host" in text
+
+
+async def test_changes_since_last_good_lists_commits_between_deploys(t):
+    ids = await world()
+    text = await t.call("changes_since_last_good", {"deployment_id": ids["failed"]})
+    summary = json.loads(text.split("\nCommits", 1)[0].split("\nNote", 1)[0])
+    assert summary["deployment_id"] == ids["failed"]
+    assert summary["failed_deploys_in_between"] == 0
+    assert summary["last_good_deployment_id"] in t.ledger.deploys
+    assert SHA in text and SHA in t.ledger.commits
+    assert (await t.call("changes_since_last_good", {"deployment_id": "nope"})).startswith("error:")
+
+
+async def test_health_stats_compute_uptime_latency_and_outages(t):
+    ids = await world()
+    now = utcnow()
+    async with session_scope() as session:
+        # api: ok, fail, fail, ok (a 20-minute outage), then fail now (ongoing)
+        for minutes, ok, latency in [
+            (40, True, 100),
+            (30, False, None),
+            (20, False, None),
+            (10, True, 300),
+            (1, False, None),
+        ]:
+            session.add(
+                HealthCheck(
+                    service_id=ids["api"],
+                    status_code=200 if ok else 503,
+                    latency_ms=latency,
+                    ok=ok,
+                    checked_at=now - timedelta(minutes=minutes),
+                )
+            )
+        await session.commit()
+    text = await t.call("health_stats", {})
+    stats = {s["service"]: s for s in json.loads(text.split("\n", 1)[1].split("\nChart ready")[0])}
+    api, web = stats["storefront-api"], stats["storefront-web"]
+    assert api["uptime_percent"] == 40.0 and api["failed_checks"] == 3
+    assert api["outages"] == 2 and api["longest_outage_minutes"] == 20.0
+    assert api["down_now"] is True and api["p50_latency_ms"] == 100 and api["p95_latency_ms"] == 300
+    assert web["uptime_percent"] == 100.0 and web["down_now"] is False
+    assert "[chart:" in text and ids["api"] in t.ledger.services
+    assert (await t.call("health_stats", {"service": "nope"})).startswith("error: no service")
+
+
+async def test_search_deployments_by_commit_and_truncation_note(t):
+    ids = await world()
+    found = await t.call("search_deployments", {"commit_sha": SHA[:8]})
+    assert ids["failed"] in found and ids["fixed"] not in found
+    assert (await t.call("search_deployments", {"commit_sha": "abc"})).startswith("error:")
+    capped = await t.call("search_deployments", {"limit": "2"})
+    assert "there may be more" in capped
+    assert "there may be more" not in await t.call("search_deployments", {"limit": "20"})
 
 
 # ───────────────────────────── citations

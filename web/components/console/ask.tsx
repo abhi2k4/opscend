@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Boxes, ChevronRight, GitCommitHorizontal, Rocket, ScrollText, Siren, Wrench } from "lucide-react";
+import { Activity, Boxes, ChevronRight, FileSearch, GitCommitHorizontal, Rocket, ScrollText, Siren, Wrench } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useState, type ReactNode } from "react";
 import { useNow } from "@/components/console/deploys";
@@ -16,6 +16,7 @@ const CITATION_ICON: Record<ChatCitationType, typeof Rocket> = {
   log: ScrollText,
   commit: GitCommitHorizontal,
   incident: Siren,
+  investigation: FileSearch,
   service: Boxes,
 };
 
@@ -30,6 +31,8 @@ function citationHref(c: ChatCitation): { href: string; external: boolean } | nu
       return c.deployment_id ? { href: `/console/deployments/${c.deployment_id}?tab=diff`, external: false } : null;
     case "incident":
       return { href: "/console/incidents", external: false };
+    case "investigation":
+      return { href: `/console/investigations/${c.ref}`, external: false };
     case "service":
       return { href: "/console/timeline", external: false };
   }
@@ -67,8 +70,8 @@ export function CitationChip({ citation }: { citation: ChatCitation }) {
 // paragraphs, bullet and numbered lists, fenced code, `code`, **bold** and
 // citation markers. Everything renders as React text, never as HTML.
 
-const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[(?:deploy|log|commit|incident|service):[^\]\s]+\])/g;
-const MARKER = /^\[(deploy|log|commit|incident|service):([^\]\s]+)\]$/;
+const INLINE = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[(?:deploy|log|commit|incident|investigation|service):[^\]\s]+\])/g;
+const MARKER = /^\[(deploy|log|commit|incident|investigation|service):([^\]\s]+)\]$/;
 
 function Inline({ text, citations }: { text: string; citations: Map<string, ChatCitation> }) {
   const parts = text.split(INLINE);

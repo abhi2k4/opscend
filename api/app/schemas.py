@@ -393,7 +393,7 @@ class Investigation(Schema):
 
 
 class ChatCitation(Schema):
-    type: Literal["deploy", "log", "commit", "incident", "service"]
+    type: Literal["deploy", "log", "commit", "incident", "investigation", "service"]
     ref: str
     label: str
     detail: str | None = None

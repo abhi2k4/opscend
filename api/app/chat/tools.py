@@ -6,6 +6,7 @@ goes into the `ChatLedger`, and an answer may only cite ids found there.
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import mean
@@ -23,7 +24,16 @@ from app.investigator.tools import (
     _function,
     untrusted,
 )
-from app.models import Commit, Deployment, HealthCheck, Incident, LogLine, Service
+from app.models import (
+    Commit,
+    Deployment,
+    HealthCheck,
+    Incident,
+    Investigation,
+    LogLine,
+    Service,
+)
+from app.services.changes import get_changes
 
 DEFAULT_HOURS = 24 * 7
 MAX_HOURS = 24 * 90
@@ -33,6 +43,9 @@ MAX_STATS_DEPLOYS = 5000
 MAX_SERVICES = 100
 MAX_CHART_BARS = 12
 MAX_TREND_BUCKETS = 92
+MAX_HEALTH_CHECKS = 20000
+MAX_CHANGED_FILES = 40
+MAX_CHANGED_COMMITS = 30
 
 # Deploy statuses (see `DeployStatus` in app/schemas.py).
 FINISHED_BAD = "failed"
@@ -41,9 +54,10 @@ FINISHED_GOOD = "ready"
 
 @dataclass
 class ChatLedger(EvidenceLedger):
-    """The investigator's ledger plus the incidents shown."""
+    """The investigator's ledger plus the incidents and investigations shown."""
 
     incidents: set[str] = field(default_factory=set)
+    investigations: set[str] = field(default_factory=set)
     # Charts the tools built this turn, by id. Only these may appear in the answer.
     charts: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -90,6 +104,8 @@ class ChatLedger(EvidenceLedger):
             self.commits.add(ref)
         elif kind == "incident":
             self.incidents.add(ref)
+        elif kind == "investigation":
+            self.investigations.add(ref)
         elif kind == "service":
             self.services.add(ref)
 
@@ -125,6 +141,11 @@ CHAT_TOOL_SPECS: list[dict[str, Any]] = [
             },
             "branch": {"type": "string"},
             "environment": {"type": "string", "description": "e.g. production, preview"},
+            "commit_sha": {
+                "type": "string",
+                "description": "Full commit sha or its first 7+ characters: which deploys "
+                "shipped this commit",
+            },
             "since_hours": _HOURS,
             "limit": _LIMIT,
         },
@@ -182,6 +203,49 @@ CHAT_TOOL_SPECS: list[dict[str, Any]] = [
         {"service": _SERVICE, "since_hours": _HOURS},
         [],
     ),
+    _function(
+        "health_stats",
+        "Per-service uptime from health checks over a time window: uptime percentage, "
+        "p50/p95 response time, number of outages, the longest outage and whether the "
+        "service is down now. Use it for uptime, availability or latency questions. "
+        "Omit service to get every service in one call. Comes with a chart.",
+        {"service": _SERVICE, "since_hours": _HOURS},
+        [],
+    ),
+    _function(
+        "list_investigations",
+        "Investigation reports the investigator already wrote about failed deploys and "
+        "incidents, newest first, with their likely cause, confidence and the reader's "
+        "rating (up/down).",
+        {
+            "service": _SERVICE,
+            "status": {"type": "string", "enum": ["queued", "running", "completed", "failed"]},
+            "rating": {"type": "string", "enum": ["up", "down"]},
+            "since_hours": _HOURS,
+        },
+        [],
+    ),
+    _function(
+        "get_investigation",
+        "The full report of one investigation: likely cause, confidence, summary, culprit "
+        "commit, cited evidence, suggested fix and the reader's rating. Pass "
+        "investigation_id, or deployment_id to get the latest report on that deployment. "
+        "Check this before digging through logs to explain a failed deploy.",
+        {
+            "investigation_id": {"type": "string"},
+            "deployment_id": {"type": "string"},
+        },
+        [],
+    ),
+    _function(
+        "changes_since_last_good",
+        "What changed between a deployment and the last successful deploy of the same "
+        "service: the commits and files in between (files the failure points at are "
+        "marked suspect), how many deploys failed in between and whether the commit was "
+        "the same. Use it for 'what changed' questions about a deploy.",
+        {"deployment_id": {"type": "string"}},
+        ["deployment_id"],
+    ),
 ]
 
 
@@ -191,6 +255,13 @@ def _int(value: str | None, default: int, maximum: int) -> int:
     except ValueError:
         number = default
     return max(1, min(number, maximum))
+
+
+def _more(shown: int, limit: int) -> str:
+    """Tell the model a result was cut off, so it does not treat it as complete."""
+    if shown < limit:
+        return ""
+    return f" (showing the first {limit}; there may be more, narrow the filters)"
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -319,10 +390,16 @@ class ChatTools(InvestigatorTools):
         status: str | None = None,
         branch: str | None = None,
         environment: str | None = None,
+        commit_sha: str | None = None,
         since_hours: str | None = None,
         limit: str | None = None,
     ) -> str:
         query = select(Deployment).where(Deployment.started_at >= self._since(since_hours))
+        if commit_sha:
+            sha = commit_sha.strip().lower()
+            if len(sha) < 7:
+                return "error: commit_sha needs at least 7 characters"
+            query = query.where(Deployment.commit_sha.like(f"{_escape_like(sha)}%", escape="/"))
         if provider:
             query = query.where(Deployment.provider == provider.lower())
         if status:
@@ -334,10 +411,9 @@ class ChatTools(InvestigatorTools):
         scoped = await self._scoped(query, Deployment.service_id, service)
         if isinstance(scoped, str):
             return scoped
+        cap = _int(limit, 20, MAX_ROWS)
         rows = (
-            await self._session.scalars(
-                scoped.order_by(Deployment.started_at.desc()).limit(_int(limit, 20, MAX_ROWS))
-            )
+            await self._session.scalars(scoped.order_by(Deployment.started_at.desc()).limit(cap))
         ).all()
         if not rows:
             return "No deployments match those filters."
@@ -345,7 +421,8 @@ class ChatTools(InvestigatorTools):
         messages = "\n".join(
             f"{d.id}: {_first_line(d.commit_message)}" for d in rows if d.commit_message
         )
-        text = f"{len(rows)} deployment(s), newest first:\n" + json.dumps(described, indent=1)
+        text = f"{len(rows)} deployment(s), newest first{_more(len(rows), cap)}:\n"
+        text += json.dumps(described, indent=1)
         if messages:
             text += "\n" + untrusted("commit messages", messages)
         return text
@@ -438,7 +515,9 @@ class ChatTools(InvestigatorTools):
                     "duration_ms": duration_ms(incident.opened_at, incident.resolved_at),
                 }
             )
-        return json.dumps(out, indent=1)
+        return f"{len(out)} incident(s), newest first{_more(len(out), MAX_ROWS)}:\n" + json.dumps(
+            out, indent=1
+        )
 
     async def list_commits(
         self,
@@ -455,10 +534,9 @@ class ChatTools(InvestigatorTools):
             stmt = stmt.where(Commit.author.ilike(f"%{_escape_like(author.strip())}%", escape="/"))
         if query:
             stmt = stmt.where(Commit.message.ilike(f"%{_escape_like(query.strip())}%", escape="/"))
+        cap = _int(limit, 20, MAX_ROWS)
         rows = (
-            await self._session.scalars(
-                stmt.order_by(Commit.committed_at.desc()).limit(_int(limit, 20, MAX_ROWS))
-            )
+            await self._session.scalars(stmt.order_by(Commit.committed_at.desc()).limit(cap))
         ).all()
         if not rows:
             return "No commits match those filters."
@@ -469,7 +547,8 @@ class ChatTools(InvestigatorTools):
                 f"{commit.sha} {commit.repo} {commit.committed_at:%Y-%m-%d %H:%M} "
                 f"{commit.author}: {_first_line(commit.message, 160)}"
             )
-        return f"{len(rows)} commit(s), newest first:\n" + untrusted("commits", "\n".join(lines))
+        header = f"{len(rows)} commit(s), newest first{_more(len(rows), cap)}:\n"
+        return header + untrusted("commits", "\n".join(lines))
 
     async def deploy_stats(self, service: str | None = None, since_hours: str | None = None) -> str:
         hours = _int(since_hours, DEFAULT_HOURS, MAX_HOURS)
@@ -558,6 +637,233 @@ class ChatTools(InvestigatorTools):
             f"{len(rows)} in total:\n" + "\n".join(lines) + chart
         )
 
+    async def health_stats(self, service: str | None = None, since_hours: str | None = None) -> str:
+        hours = _int(since_hours, DEFAULT_HOURS, MAX_HOURS)
+        query = select(HealthCheck).where(
+            HealthCheck.checked_at >= utcnow() - timedelta(hours=hours)
+        )
+        scoped = await self._scoped(query, HealthCheck.service_id, service)
+        if isinstance(scoped, str):
+            return scoped
+        rows = (
+            await self._session.scalars(
+                scoped.order_by(HealthCheck.checked_at).limit(MAX_HEALTH_CHECKS)
+            )
+        ).all()
+        if not rows:
+            return (
+                f"No health checks in the last {hours} hours. Uptime is only measured for "
+                "services with a health check URL."
+            )
+        by_service: dict[str, list[HealthCheck]] = {}
+        for check in rows:
+            by_service.setdefault(check.service_id, []).append(check)
+        names = {
+            s.id: s.name
+            for s in (
+                await self._session.scalars(select(Service).where(Service.id.in_(by_service)))
+            ).all()
+        }
+        stats = []
+        for service_id, checks in by_service.items():
+            self.ledger.services.add(service_id)
+            stats.append(
+                {"service": names.get(service_id, service_id), **_health(service_id, checks)}
+            )
+        stats.sort(key=lambda item: item["uptime_percent"])
+        header = f"Health over the last {hours} hours (UTC), least available first"
+        if len(rows) == MAX_HEALTH_CHECKS:
+            header += f" (first {MAX_HEALTH_CHECKS} checks only)"
+        shown = stats[:MAX_CHART_BARS]
+        chart = self.ledger.add_chart(
+            "bars",
+            "Uptime by service",
+            "%",
+            [item["service"] for item in shown],
+            [("Uptime", "ok", [item["uptime_percent"] for item in shown])],
+            subtitle=_window(hours),
+        )
+        return f"{header}:\n" + json.dumps(stats, indent=1) + chart
+
+    async def list_investigations(
+        self,
+        service: str | None = None,
+        status: str | None = None,
+        rating: str | None = None,
+        since_hours: str | None = None,
+    ) -> str:
+        query = select(Investigation).where(Investigation.created_at >= self._since(since_hours))
+        if status:
+            query = query.where(Investigation.status == status.lower())
+        if rating in ("up", "down"):
+            query = query.where(Investigation.feedback_rating == rating)
+        if service:
+            services = await self._services(service)
+            if isinstance(services, str):
+                return services
+            query = query.join(Deployment, Deployment.id == Investigation.deployment_id).where(
+                Deployment.service_id.in_([s.id for s in services])
+            )
+        rows = (
+            await self._session.scalars(
+                query.order_by(Investigation.created_at.desc()).limit(MAX_ROWS)
+            )
+        ).all()
+        if not rows:
+            return "No investigations match those filters."
+        out, causes = [], []
+        for item in rows:
+            self.ledger.investigations.add(item.id)
+            if item.deployment_id:
+                self.ledger.deploys[item.deployment_id] = item.deployment_id
+            report = item.report or {}
+            out.append(
+                {
+                    "investigation_id": item.id,
+                    "service": item.service_name,
+                    "deployment_id": item.deployment_id,
+                    "incident_id": item.incident_id,
+                    "status": item.status,
+                    "confidence": report.get("confidence"),
+                    "inconclusive": report.get("inconclusive"),
+                    "rating": item.feedback_rating,
+                    "created_at": _iso(item.created_at),
+                }
+            )
+            if report.get("likely_cause"):
+                causes.append(f"{item.id}: {_first_line(report['likely_cause'], 200)}")
+        text = f"{len(out)} investigation(s), newest first{_more(len(out), MAX_ROWS)}:\n"
+        text += json.dumps(out, indent=1)
+        if causes:
+            text += "\nLikely causes:\n" + untrusted("report text", "\n".join(causes))
+        return text
+
+    async def get_investigation(
+        self, investigation_id: str | None = None, deployment_id: str | None = None
+    ) -> str:
+        if investigation_id:
+            item = await self._session.get(Investigation, investigation_id.strip())
+        elif deployment_id:
+            target = self.ledger.deploys.get(deployment_id.strip(), deployment_id.strip())
+            item = await self._session.scalar(
+                select(Investigation)
+                .where(Investigation.deployment_id == target)
+                .order_by(Investigation.created_at.desc())
+                .limit(1)
+            )
+        else:
+            return "error: pass investigation_id or deployment_id"
+        if item is None:
+            return (
+                "No investigation found. One can be started from the deployment's page in Opscend."
+            )
+        self.ledger.investigations.add(item.id)
+        if item.deployment_id:
+            self.ledger.deploys[item.deployment_id] = item.deployment_id
+        meta: dict[str, Any] = {
+            "investigation_id": item.id,
+            "service": item.service_name,
+            "deployment_id": item.deployment_id,
+            "incident_id": item.incident_id,
+            "status": item.status,
+            "created_at": _iso(item.created_at),
+            "rating": item.feedback_rating,
+        }
+        if item.status != "completed" or not item.report:
+            meta["error"] = item.error
+            return json.dumps(meta, indent=1) + "\nThis investigation has no report yet."
+        report = item.report
+        meta.update(
+            confidence=report.get("confidence"),
+            inconclusive=report.get("inconclusive"),
+            culprit_commit_sha=report.get("culprit_commit_sha"),
+        )
+        if report.get("culprit_commit_sha"):
+            self.ledger.commits.add(report["culprit_commit_sha"])
+        evidence = []
+        for ref in report.get("evidence") or []:
+            kind, key, quote = ref.get("type"), ref.get("ref") or "", ref.get("quote") or ""
+            if kind == "log" and ref.get("deployment_id"):
+                self.ledger.logs[key] = (ref["deployment_id"], quote)
+            elif kind == "commit":
+                self.ledger.commits.add(key)
+            elif kind == "deploy":
+                self.ledger.deploys[key] = key
+            evidence.append(f"[{kind}:{key}] {quote[:MAX_LINE_CHARS]}")
+        body = "\n".join(
+            [
+                f"Likely cause: {report.get('likely_cause') or ''}",
+                f"Summary: {report.get('summary') or ''}",
+                f"Suggested fix: {report.get('suggested_fix') or 'none'}",
+                f"Missing information: {report.get('missing') or 'none'}",
+                "Evidence:",
+                *evidence,
+            ]
+        )
+        text = json.dumps(meta, indent=1) + "\n" + untrusted("investigation report", body)
+        if item.feedback_rating == "down":
+            note = f": {item.feedback_note}" if item.feedback_note else ""
+            text += (
+                "\nA reader rated this report as wrong" + note + ". Say so, and do not present "
+                "its conclusion as fact."
+            )
+        return text
+
+    async def changes_since_last_good(self, deployment_id: str) -> str:
+        target = self.ledger.deploys.get(deployment_id.strip(), deployment_id.strip())
+        deployment = await self._session.get(Deployment, target)
+        if deployment is None:
+            deployment = await self._session.scalar(
+                select(Deployment).where(Deployment.external_id == deployment_id.strip()).limit(1)
+            )
+        if deployment is None:
+            return f"error: no deployment with id '{deployment_id}'"
+        self.ledger.add_deployment(deployment)
+        changes = await get_changes(self._session, deployment)
+        if changes.baseline is None:
+            return changes.note or "No earlier successful deploy to compare against."
+        self.ledger.deploys[changes.baseline.id] = changes.baseline.id
+        if changes.baseline.commit_sha:
+            self.ledger.commits.add(changes.baseline.commit_sha)
+        summary: dict[str, Any] = {
+            "deployment_id": deployment.id,
+            "last_good_deployment_id": changes.baseline.id,
+            "last_good_started_at": _iso(changes.baseline.started_at),
+            "same_commit": changes.same_commit,
+            "failed_deploys_in_between": changes.failed_between,
+            "duration_change_ms": changes.duration_delta_ms,
+            "source": changes.source,
+            "commit_count": len(changes.commits),
+            "file_count": len(changes.files),
+            "files": [
+                {
+                    "filename": f.filename,
+                    "status": f.status,
+                    "additions": f.additions,
+                    "deletions": f.deletions,
+                    **({"suspect": f.suspect_reason, "line": f.line} if f.suspect else {}),
+                }
+                for f in changes.files[:MAX_CHANGED_FILES]
+            ],
+        }
+        lines = []
+        for commit in changes.commits[:MAX_CHANGED_COMMITS]:
+            self.ledger.commits.add(commit.sha)
+            lines.append(f"{commit.sha} {commit.author}: {_first_line(commit.message, 160)}")
+        text = json.dumps(summary, indent=1)
+        if len(changes.files) > MAX_CHANGED_FILES or changes.truncated:
+            text += f"\nOnly the first {MAX_CHANGED_FILES} files are listed."
+        if lines:
+            more = (
+                f" (the first {MAX_CHANGED_COMMITS} of {len(changes.commits)})"
+                if len(changes.commits) > MAX_CHANGED_COMMITS
+                else ""
+            )
+            text += f"\nCommits, newest first{more}:\n" + untrusted("commits", "\n".join(lines))
+        if changes.note:
+            text += f"\nNote: {changes.note}"
+        return text
+
     async def get_health_history(self, service_id: str) -> str:
         text = await super().get_health_history(service_id)
         service = await self._session.scalar(
@@ -590,6 +896,48 @@ class ChatTools(InvestigatorTools):
             ],
             subtitle=f"last {len(checks)} health checks · failed checks leave a gap · UTC",
         )
+
+
+def _percentile(values: list[int], pct: float) -> int | None:
+    """Nearest-rank percentile."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, min(len(ordered), math.ceil(pct / 100 * len(ordered))) - 1)]
+
+
+def _health(service_id: str, checks: list[HealthCheck]) -> dict[str, Any]:
+    """Uptime, latency and outages from one service's checks, given oldest first.
+
+    An outage is a run of failed checks; it lasts from the first failed check until the
+    next passing one (or until now, if it is still going on).
+    """
+    ok = [c for c in checks if c.ok]
+    latencies = [c.latency_ms for c in ok if c.latency_ms is not None]
+    outages: list[float] = []
+    down_since: datetime | None = None
+    for check in checks:
+        if not check.ok and down_since is None:
+            down_since = ensure_utc(check.checked_at)
+        elif check.ok and down_since is not None:
+            outages.append((ensure_utc(check.checked_at) - down_since).total_seconds())
+            down_since = None
+    ongoing = down_since is not None
+    if down_since is not None:
+        outages.append((utcnow() - down_since).total_seconds())
+    return {
+        "service_id": service_id,
+        "checks": len(checks),
+        "failed_checks": len(checks) - len(ok),
+        "uptime_percent": round(100 * len(ok) / len(checks), 2),
+        "p50_latency_ms": _percentile(latencies, 50),
+        "p95_latency_ms": _percentile(latencies, 95),
+        "outages": len(outages),
+        "longest_outage_minutes": round(max(outages) / 60, 1) if outages else 0,
+        "down_now": ongoing,
+        "down_since": _iso(down_since) if ongoing else None,
+        "last_check_at": _iso(checks[-1].checked_at),
+    }
 
 
 def _window(hours: int) -> str:

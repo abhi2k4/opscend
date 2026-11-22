@@ -4,9 +4,10 @@ A chart is placed the same way, as `[chart:<id>]`, and is kept only if a tool bu
 chart with that id during this answer.
 
 The model cites what it saw as `[deploy:<id>]`, `[log:<id>]`, `[commit:<sha>]`,
-`[incident:<id>]` or `[service:<id>]`. Each one is checked against the ledger: a
-verified marker is rewritten to its canonical id and described from the database;
-anything the tools never showed is removed, so an answer cannot link to invented ids.
+`[incident:<id>]`, `[investigation:<id>]` or `[service:<id>]`. Each one is checked
+against the ledger: a verified marker is rewritten to its canonical id and described
+from the database; anything the tools never showed is removed, so an answer cannot
+link to invented ids.
 """
 
 import re
@@ -15,22 +16,24 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Commit, Deployment, Incident, Service
+from app.models import Commit, Deployment, Incident, Investigation, Service
 
 from .tools import CHAT_TOOL_SPECS, ChatLedger
 
-CITATION = re.compile(r"\[(deploy|log|commit|incident|service):\s*([^\]\s]{1,80})\s*\]")
+CITATION = re.compile(
+    r"\[(deploy|log|commit|incident|investigation|service):\s*([^\]\s]{1,80})\s*\]"
+)
 # Models bend the marker format: fullwidth brackets ("【log:…】"), no prefix on log ids
 # ("[log_ab12cd34ef]"), several ids in one bracket ("[log:a, log:b]", "[log_a; log_b]")
 # and non-ASCII hyphens inside ids. All of these are normalized before verification.
 BRACKETS = str.maketrans({"【": "[", "】": "]", "［": "[", "］": "]"})
 HYPHENS = re.compile(r"[\u2010-\u2015\u2212]")
 GROUP = re.compile(r"\[([^\[\]\n]{1,600})\]")
-PART = re.compile(r"^(?:(deploy|log|commit|incident|service):\s*)?(\S{1,80})$")
+PART = re.compile(r"^(?:(deploy|log|commit|incident|investigation|service):\s*)?(\S{1,80})$")
 BARE_LOG = re.compile(r"^log_[0-9a-f]{10}$")
 # Made-up marker types such as "[deploy_stats:0]" are removed.
 STRAY = re.compile(r"\[([a-z][a-z_]{2,30}):[^\]\s]{1,80}\]")
-TYPES = ("deploy", "log", "commit", "incident", "service")
+TYPES = ("deploy", "log", "commit", "incident", "investigation", "service")
 CHART = re.compile(r"\s*\[chart:\s*([^\]\s]{1,40})\s*\]\s*")
 MAX_CHARTS = 3
 # Tool names cited as if they were sources ("[deploy_stats]") are removed too.
@@ -164,6 +167,14 @@ async def _verify(
         return _citation(
             "incident", incident.id, incident.title, deployment_id=incident.deployment_id
         )
+    if kind == "investigation":
+        found = await session.get(Investigation, ref) if ref in ledger.investigations else None
+        if found is None:
+            return None
+        confidence = (found.report or {}).get("confidence")
+        label = "report" + (f" · {found.service_name}" if found.service_name else "")
+        label += f" · {confidence}" if confidence else ""
+        return _citation("investigation", found.id, label, deployment_id=found.deployment_id)
     service = await session.scalar(
         select(Service).where(or_(Service.id == ref, Service.name == ref)).limit(1)
     )
