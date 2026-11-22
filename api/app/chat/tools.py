@@ -218,7 +218,12 @@ class ChatTools(InvestigatorTools):
 
     async def _services(self, ref: str | None) -> list[Service] | str:
         """Services matching an id or name; an error string when nothing matches."""
-        query = select(Service).order_by(Service.name).limit(MAX_SERVICES)
+        query = (
+            select(Service)
+            .where(Service.monitored.is_(True))
+            .order_by(Service.name)
+            .limit(MAX_SERVICES)
+        )
         if not ref:
             return list((await self._session.scalars(query)).all())
         ref = ref.strip()
@@ -236,7 +241,11 @@ class ChatTools(InvestigatorTools):
         ).all()
         if partial:
             return list(partial)
-        known = (await self._session.scalars(select(Service.name).limit(MAX_SERVICES))).all()
+        known = (
+            await self._session.scalars(
+                select(Service.name).where(Service.monitored.is_(True)).limit(MAX_SERVICES)
+            )
+        ).all()
         return f"error: no service matches '{ref}'. Known services: {', '.join(known) or 'none'}"
 
     def _since(self, since_hours: str | None) -> datetime:
@@ -244,7 +253,8 @@ class ChatTools(InvestigatorTools):
 
     async def _scoped(self, query: Select, column, service: str | None) -> Select | str:  # noqa: ANN001
         if not service:
-            return query
+            # Services with monitoring turned off stay out of every answer.
+            return query.where(column.in_(select(Service.id).where(Service.monitored.is_(True))))
         services = await self._services(service)
         if isinstance(services, str):
             return services

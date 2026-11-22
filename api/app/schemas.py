@@ -123,6 +123,15 @@ class Service(Schema):
     health_history: list[HealthPoint]
     last_deploy_status: DeployStatus | None
     last_deploy_at: datetime | None
+    pinned: bool
+    muted: bool
+    monitored: bool
+
+
+class MonitoredServices(Schema):
+    """Body of PUT /integrations/{id}/services: the services to keep monitoring."""
+
+    service_ids: list[str]
 
 
 class Commit(Schema):

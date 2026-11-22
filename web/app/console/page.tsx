@@ -1,7 +1,7 @@
 "use client";
 
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
-import { ArrowRight, CircleCheck, Pencil, Siren } from "lucide-react";
+import { ArrowRight, BellOff, CircleCheck, Pencil, Siren, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { mutate } from "swr";
@@ -11,8 +11,8 @@ import { useToast } from "@/components/console/toast";
 import { Button, ButtonLink, Empty, HealthBadge, Panel, PanelHeader, Skeleton, StatusBadge, Tag } from "@/components/ui/primitives";
 import { ProviderTile } from "@/components/ui/provider";
 import { api, ApiError, useApi } from "@/lib/api";
-import { timeAgo } from "@/lib/format";
-import type { Overview, Service } from "@/lib/types";
+import { cn, timeAgo } from "@/lib/format";
+import type { Overview, Service, ServiceUpdate } from "@/lib/types";
 
 function Count({ value }: { value: number }) {
   const mv = useMotionValue(0);
@@ -40,8 +40,44 @@ function Stat({ label, value, tone, hint }: { label: string; value: number; tone
 
 const SLOTS = 24;
 
+/** Pin (first) or mute (last) a service. The card moves at once; the API confirms after. */
+function useRank(s: Service) {
+  const toast = useToast();
+  return async (change: ServiceUpdate) => {
+    // Pinned and muted exclude each other, as on the server.
+    const next = { ...s, ...change, ...(change.pinned ? { muted: false } : {}), ...(change.muted ? { pinned: false } : {}) };
+    void mutate("/overview", (cur?: Overview) => (cur ? { ...cur, services: cur.services.map((x) => (x.id === s.id ? next : x)) } : cur), { revalidate: false });
+    try {
+      await api(`/services/${s.id}`, { method: "PATCH", json: change });
+    } catch (e) {
+      toast.error(`Could not update ${s.name}`, (e as ApiError).message);
+    } finally {
+      void mutate("/overview");
+    }
+  };
+}
+
+function RankButton({ on, label, onClick, children }: { on: boolean; label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "grid size-6 place-items-center rounded-md transition-[opacity,color,background-color] hover:bg-raised focus-visible:opacity-100",
+        on ? "text-fg" : "text-faint opacity-0 hover:text-fg group-hover:opacity-100 pointer-coarse:opacity-100",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ServiceCard({ s, now }: { s: Service; now: number }) {
   const [editing, setEditing] = useState(false);
+  const rank = useRank(s);
   const checks = s.health_history.slice(-SLOTS);
   const monitored = !!s.health_url;
   const max = Math.max(1, ...checks.map((h) => h.latency_ms ?? 0));
@@ -49,12 +85,20 @@ function ServiceCard({ s, now }: { s: Service; now: number }) {
   const host = s.health_url ? s.health_url.replace(/^https?:\/\//, "").replace(/\/$/, "") : null;
 
   return (
-    <div className="panel group flex flex-col p-4">
+    <div className={cn("panel group flex h-full flex-col p-4 transition-opacity duration-300", s.muted && "opacity-50 focus-within:opacity-100 hover:opacity-100", s.pinned && "border-[var(--line-strong)]")}>
       <div className="flex items-start gap-3">
         <ProviderTile provider={s.provider} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-medium">{s.name}</div>
           <div className="truncate font-mono text-[11px] text-faint">{s.repo ?? s.external_id}</div>
+        </div>
+        <div className="-mr-1 -mt-0.5 flex shrink-0 items-center">
+          <RankButton on={s.pinned} label={s.pinned ? `Unpin ${s.name}` : `Pin ${s.name} to the top`} onClick={() => rank({ pinned: !s.pinned })}>
+            <Star size={13} fill={s.pinned ? "currentColor" : "none"} />
+          </RankButton>
+          <RankButton on={s.muted} label={s.muted ? `Unmute ${s.name}` : `Mute ${s.name} and move it to the end`} onClick={() => rank({ muted: !s.muted })}>
+            <BellOff size={13} />
+          </RankButton>
         </div>
         {monitored ? (
           checks.length > 0 ? (
@@ -93,7 +137,7 @@ function ServiceCard({ s, now }: { s: Service; now: number }) {
             <a href={s.health_url!} target="_blank" rel="noreferrer" className="truncate text-faint hover:text-fg" title={s.health_url!}>
               {host}
             </a>
-            <button onClick={() => setEditing(true)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-fg focus:opacity-100 group-hover:opacity-100" aria-label={`Change the health URL of ${s.name}`}>
+            <button onClick={() => setEditing(true)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-fg focus:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100" aria-label={`Change the health URL of ${s.name}`}>
               <Pencil size={11} />
             </button>
           </span>
@@ -180,10 +224,11 @@ function HealthUrlEditor({ s, onDone }: { s: Service; onDone: () => void }) {
   );
 }
 
-/** What deserves attention first: anything down, then whatever shipped most recently. */
+/** Pinned first and muted last; in between, anything down, then whatever shipped most recently. */
 function byUrgency(a: Service, b: Service) {
+  const place = (s: Service) => (s.pinned ? 0 : s.muted ? 2 : 1);
   const rank = (s: Service) => (s.health === "down" ? 0 : s.last_deploy_status === "failed" ? 1 : 2);
-  return rank(a) - rank(b) || (b.last_deploy_at ?? "").localeCompare(a.last_deploy_at ?? "") || a.name.localeCompare(b.name);
+  return place(a) - place(b) || rank(a) - rank(b) || (b.last_deploy_at ?? "").localeCompare(a.last_deploy_at ?? "") || a.name.localeCompare(b.name);
 }
 
 const FIRST_SERVICES = 9;
@@ -194,6 +239,8 @@ function ServiceGrid({ services, now }: { services: Service[]; now: number }) {
   const shown = all ? sorted : sorted.slice(0, FIRST_SERVICES);
   const monitored = services.filter((s) => s.health_url).length;
   const down = services.filter((s) => s.health === "down").length;
+  const pinned = services.filter((s) => s.pinned).length;
+  const muted = services.filter((s) => s.muted).length;
 
   return (
     <>
@@ -201,12 +248,17 @@ function ServiceGrid({ services, now }: { services: Service[]; now: number }) {
         <h2 className="label-mono">Service health</h2>
         <span className="font-mono text-[11px] text-faint">
           {monitored} of {services.length} monitored
+          {pinned > 0 && ` · ${pinned} pinned`}
+          {muted > 0 && ` · ${muted} muted`}
           {down > 0 && <span className="text-err"> · {down} down</span>}
         </span>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((s) => (
-          <ServiceCard key={s.id} s={s} now={now} />
+          // `layout` slides a card to its new place when it is pinned or muted.
+          <motion.div key={s.id} layout="position" transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}>
+            <ServiceCard s={s} now={now} />
+          </motion.div>
         ))}
       </div>
       {sorted.length > FIRST_SERVICES && (
@@ -273,7 +325,7 @@ export default function OverviewPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 xl:grid-cols-6">
         <Stat label="Services" value={stats.services} />
         <Stat label="Down" value={stats.services_down} tone="var(--err)" />
         <Stat label="Deploys" value={stats.deploys_24h} hint="24h" />
@@ -282,7 +334,7 @@ export default function OverviewPage() {
         <Stat label="Investigations" value={stats.investigations} tone="var(--accent)" />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px]">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Panel>
           <PanelHeader
             title="Deploy activity · last 24 hours"
@@ -335,8 +387,8 @@ export default function OverviewPage() {
         <ServiceGrid services={data.services} now={now} />
       ) : (
         <Panel className="mt-6">
-          <Empty title="No services yet" action={<ButtonLink href="/console/integrations" variant="primary">Connect a provider</ButtonLink>}>
-            Connect Vercel or Railway and their projects show up here with health and deploy status.
+          <Empty title="No services monitored" action={<ButtonLink href="/console/integrations" variant="primary">Open integrations</ButtonLink>}>
+            Connect a provider, or choose which of its services to monitor, and they show up here with health and deploy status.
           </Empty>
         </Panel>
       )}
@@ -360,11 +412,11 @@ function LoadingState() {
   return (
     <div className="space-y-4">
       <Skeleton className="h-[78px] rounded-xl" />
-      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Skeleton className="h-36 rounded-xl" />
         <Skeleton className="h-36 rounded-xl" />
       </div>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-32 rounded-xl" />
         ))}

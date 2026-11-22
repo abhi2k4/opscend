@@ -9,7 +9,11 @@ from app import models, schemas
 from app.core.time import utcnow
 from app.incidents import rules
 from app.investigator.service import start_investigation
-from app.services.presenters import incident_out, investigation_out
+from app.services.presenters import (
+    incident_out,
+    investigation_out,
+    monitored_service_ids,
+)
 
 from .deps import SessionDep, get_or_404
 
@@ -73,7 +77,12 @@ async def list_incidents(
     status: Literal["open", "resolved"] | None = None,
     limit: int = Query(100, ge=1, le=500),
 ) -> list[schemas.Incident]:
-    query = select(models.Incident).order_by(models.Incident.opened_at.desc()).limit(limit)
+    query = (
+        select(models.Incident)
+        .where(models.Incident.service_id.in_(monitored_service_ids()))
+        .order_by(models.Incident.opened_at.desc())
+        .limit(limit)
+    )
     if status:
         query = query.where(models.Incident.status == status)
     return [await incident_out(session, row) for row in (await session.scalars(query)).all()]

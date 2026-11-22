@@ -101,6 +101,9 @@ async def _upsert_deployment(
     if service is None:
         log.info("skipping %s deployment for an unknown service", provider)
         return None
+    if not service.monitored:
+        # The user turned monitoring off for it: webhooks keep arriving, nothing is stored.
+        return None
 
     deployment = await session.scalar(
         select(Deployment).where(

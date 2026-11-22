@@ -38,8 +38,12 @@ FIRST_SYNC_WINDOW = timedelta(days=7)
 RESYNC_OVERLAP = timedelta(hours=6)
 
 
-async def sync_integration(integration_id: str) -> None:
-    """Job: pull services, deployments and commits for one integration."""
+async def sync_integration(integration_id: str, backfill: list[str] | None = None) -> None:
+    """Job: pull services, deployments and commits for one integration.
+
+    `backfill` names services that were just turned on: they get the first-sync
+    window instead of "since the last sync", so their recent history appears at once.
+    """
     async with session_scope() as session:
         integration = await session.get(Integration, integration_id)
         if integration is None:
@@ -50,7 +54,7 @@ async def sync_integration(integration_id: str) -> None:
             return
         adapter = adapter_for(integration)
         try:
-            skipped = await _sync(session, integration, adapter)
+            skipped = await _sync(session, integration, adapter, set(backfill or ()))
             status, detail = "connected", _skipped_note(skipped)
         except ProviderError as exc:
             await session.rollback()
@@ -107,7 +111,10 @@ def _skipped_note(skipped: list[str]) -> str | None:
 
 
 async def _sync(
-    session: AsyncSession, integration: Integration, adapter: ProviderAdapter
+    session: AsyncSession,
+    integration: Integration,
+    adapter: ProviderAdapter,
+    backfill: set[str] | None = None,
 ) -> list[str]:
     """Sync one integration. Returns the resources that were skipped as unreadable."""
     since = (
@@ -125,18 +132,25 @@ async def _sync(
 
     if Capability.LIST_SERVICES in capabilities:
         listed = await adapter.list_services()
-        await _upsert_services(session, integration, listed)
+        off = await _upsert_services(session, integration, listed)
         # The provider's own "latest deployment" per service, so a quiet service still
         # shows when it last shipped. Same dedup as any poll: a known state costs a lookup.
         for item in listed:
-            if item.latest_deployment is not None:
+            if item.latest_deployment is not None and item.external_id not in off:
                 events.append(_deployment_event(provider, item.latest_deployment))
     if Capability.LIST_DEPLOYS in capabilities:
         services = (
-            await session.scalars(select(Service).where(Service.integration_id == integration_id))
+            await session.scalars(
+                # Services the user turned off are still listed, but never polled.
+                select(Service).where(
+                    Service.integration_id == integration_id, Service.monitored.is_(True)
+                )
+            )
         ).all()
+        first_window = utcnow() - FIRST_SYNC_WINDOW
         for service in services:
-            deployments = await adapter.list_deployments(service_ref(service), since)
+            window = min(since, first_window) if service.id in (backfill or ()) else since
+            deployments = await adapter.list_deployments(service_ref(service), window)
             # Newest first: during a backfill an old failure then sees its successor
             # and opens no incident (see incidents/rules.py).
             for deployment in sorted(deployments, key=lambda d: d.started_at, reverse=True):
@@ -182,7 +196,11 @@ async def _repos(session: AsyncSession, adapter: CommitSource) -> list[str]:
             select(Service.repo)
             .join(Integration, Integration.id == Service.integration_id)
             # Demo services point at repos that do not exist on GitHub.
-            .where(Service.repo.is_not(None), Integration.is_demo.is_(False))
+            .where(
+                Service.repo.is_not(None),
+                Service.monitored.is_(True),
+                Integration.is_demo.is_(False),
+            )
             .distinct()
         )
     ).all()
@@ -191,7 +209,8 @@ async def _repos(session: AsyncSession, adapter: CommitSource) -> list[str]:
 
 async def _upsert_services(
     session: AsyncSession, integration: Integration, incoming: list[ServiceIn]
-) -> None:
+) -> set[str]:
+    """Store what the provider lists. Returns the external ids monitoring is off for."""
     existing = {
         service.external_id: service
         for service in await session.scalars(
@@ -215,4 +234,10 @@ async def _upsert_services(
         # None = never set, so adopt the provider's URL. "" = turned off by the user: keep it off.
         if service.health_url is None:
             service.health_url = item.health_url
+    off = {
+        item.external_id
+        for item in incoming
+        if (s := existing.get(item.external_id)) and not s.monitored
+    }
     await session.commit()
+    return off

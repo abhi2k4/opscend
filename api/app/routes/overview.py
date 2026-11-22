@@ -1,6 +1,7 @@
 """Overview, services and the merged timeline."""
 
 from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -8,44 +9,69 @@ from sqlalchemy import func, select
 
 from app import models, schemas
 from app.core.time import utcnow
-from app.services.presenters import deployment_out, incident_out, service_out
+from app.services.presenters import (
+    deployment_out,
+    incident_out,
+    monitored_service_ids,
+    service_out,
+)
 
 from .deps import SessionDep, get_or_404
 
 router = APIRouter(tags=["overview"])
 
 
-async def _services(session: SessionDep) -> list[schemas.Service]:
-    rows = await session.scalars(select(models.Service).order_by(models.Service.name))
-    return [await service_out(session, row) for row in rows.all()]
+async def _services(session: SessionDep, *, include_off: bool = False) -> list[schemas.Service]:
+    query = select(models.Service).order_by(models.Service.name)
+    if not include_off:
+        query = query.where(models.Service.monitored.is_(True))
+    return [await service_out(session, row) for row in (await session.scalars(query)).all()]
 
 
 @router.get("/services")
-async def list_services(session: SessionDep) -> list[schemas.Service]:
-    return await _services(session)
+async def list_services(
+    session: SessionDep, scope: Literal["monitored", "all"] = "monitored"
+) -> list[schemas.Service]:
+    """Monitored services. `scope=all` adds the ones monitoring is turned off for."""
+    return await _services(session, include_off=scope == "all")
 
 
 class ServiceUpdate(BaseModel):
-    health_url: str | None
+    """Only the fields that are sent are changed."""
+
+    health_url: str | None = None
+    pinned: bool | None = None
+    muted: bool | None = None
 
 
 @router.patch("/services/{service_id}")
 async def update_service(
     service_id: str, body: ServiceUpdate, session: SessionDep
 ) -> schemas.Service:
-    """Set the URL the uptime checker probes for this service.
+    """Change how a service is checked and where it sits on the overview.
 
-    A URL turns checks on for that address. An empty string turns them off and keeps
-    them off. `null` goes back to automatic: the provider's own URL on the next sync.
+    `health_url`: a URL turns uptime checks on for that address. An empty string turns
+    them off and keeps them off. `null` goes back to automatic: the provider's own URL
+    on the next sync.
+
+    `pinned` puts the service first, `muted` puts it last. Turning one on turns the
+    other off. Muting only changes the order: incidents and alerts are unaffected.
     """
     service = await get_or_404(session, models.Service, service_id)
-    if body.health_url is None:
-        service.health_url = None
-    else:
-        url = body.health_url.strip()
-        if url and not url.startswith(("http://", "https://")):
-            raise HTTPException(422, "The health URL must start with http:// or https://")
-        service.health_url = url
+    if "health_url" in body.model_fields_set:
+        if body.health_url is None:
+            service.health_url = None
+        else:
+            url = body.health_url.strip()
+            if url and not url.startswith(("http://", "https://")):
+                raise HTTPException(422, "The health URL must start with http:// or https://")
+            service.health_url = url
+    if body.pinned is not None:
+        service.pinned = body.pinned
+        service.muted = service.muted and not body.pinned
+    if body.muted is not None:
+        service.muted = body.muted
+        service.pinned = service.pinned and not body.muted
     await session.commit()
     return await service_out(session, service)
 
@@ -59,7 +85,10 @@ async def overview(session: SessionDep) -> schemas.Overview:
     recent = (
         await session.scalars(
             select(models.Deployment)
-            .where(models.Deployment.started_at >= day_ago)
+            .where(
+                models.Deployment.started_at >= day_ago,
+                models.Deployment.service_id.in_(monitored_service_ids()),
+            )
             .order_by(models.Deployment.started_at.desc())
         )
     ).all()
@@ -77,13 +106,19 @@ async def overview(session: SessionDep) -> schemas.Overview:
     open_incidents = (
         await session.scalars(
             select(models.Incident)
-            .where(models.Incident.status == "open")
+            .where(
+                models.Incident.status == "open",
+                models.Incident.service_id.in_(monitored_service_ids()),
+            )
             .order_by(models.Incident.opened_at.desc())
         )
     ).all()
     latest = (
         await session.scalars(
-            select(models.Deployment).order_by(models.Deployment.started_at.desc()).limit(20)
+            select(models.Deployment)
+            .where(models.Deployment.service_id.in_(monitored_service_ids()))
+            .order_by(models.Deployment.started_at.desc())
+            .limit(20)
         )
     ).all()
     investigations = await session.scalar(select(func.count(models.Investigation.id)))
@@ -121,7 +156,12 @@ async def timeline(
         service = await get_or_404(session, models.Service, service_id)
     items: list[schemas.DeploymentItem | schemas.CommitItem | schemas.IncidentItem] = []
 
-    query = select(models.Deployment).order_by(models.Deployment.started_at.desc()).limit(limit)
+    query = (
+        select(models.Deployment)
+        .where(models.Deployment.service_id.in_(monitored_service_ids()))
+        .order_by(models.Deployment.started_at.desc())
+        .limit(limit)
+    )
     if provider:
         query = query.where(models.Deployment.provider == provider)
     if status:
@@ -152,7 +192,12 @@ async def timeline(
             )
 
     if not status and provider != "github":
-        query = select(models.Incident).order_by(models.Incident.opened_at.desc()).limit(limit)
+        query = (
+            select(models.Incident)
+            .where(models.Incident.service_id.in_(monitored_service_ids()))
+            .order_by(models.Incident.opened_at.desc())
+            .limit(limit)
+        )
         if service:
             query = query.where(models.Incident.service_id == service.id)
         if provider:

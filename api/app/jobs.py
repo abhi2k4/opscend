@@ -35,8 +35,10 @@ async def prune(ctx: dict[str, Any]) -> None:
     await prune_old_data()
 
 
-async def sync_integration(ctx: dict[str, Any], integration_id: str) -> None:
-    await poller.sync_integration(integration_id)
+async def sync_integration(
+    ctx: dict[str, Any], integration_id: str, backfill: list[str] | None = None
+) -> None:
+    await poller.sync_integration(integration_id, backfill)
 
 
 async def reconcile(ctx: dict[str, Any]) -> None:

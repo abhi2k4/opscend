@@ -88,7 +88,13 @@ class _Turn:
         message.model = llm.model
 
     async def _context(self) -> list[dict[str, Any]]:
-        services = list((await self.session.scalars(select(Service).order_by(Service.name))).all())
+        services = list(
+            (
+                await self.session.scalars(
+                    select(Service).where(Service.monitored.is_(True)).order_by(Service.name)
+                )
+            ).all()
+        )
         self.ledger.services.update(s.id for s in services)
         earlier = (
             await self.session.scalars(

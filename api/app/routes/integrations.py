@@ -5,11 +5,13 @@ from sqlalchemy import select
 
 from app import models, schemas
 from app.core.crypto import encrypt, token_hint
+from app.core.queue import get_queue
 from app.core.time import utcnow
 from app.ingest import poller
 from app.integrations import registry
 from app.integrations.base import ProviderError
 from app.integrations.connect import adapter_for
+from app.services.presenters import service_out
 
 from .deps import SessionDep, get_or_404
 
@@ -105,6 +107,55 @@ async def test_integration(integration_id: str, session: SessionDep) -> schemas.
 async def sync_integration(integration_id: str, session: SessionDep) -> schemas.Integration:
     await get_or_404(session, models.Integration, integration_id)
     return await _sync(session, integration_id)
+
+
+@router.get("/{integration_id}/services")
+async def list_integration_services(
+    integration_id: str, session: SessionDep
+) -> list[schemas.Service]:
+    """Every service the provider listed for this account, monitored or not."""
+    await get_or_404(session, models.Integration, integration_id)
+    return await _services(session, integration_id)
+
+
+@router.put("/{integration_id}/services")
+async def choose_monitored_services(
+    integration_id: str, body: schemas.MonitoredServices, session: SessionDep
+) -> list[schemas.Service]:
+    """Set which of this integration's services are monitored.
+
+    The services named in `service_ids` are monitored; every other service of the
+    integration is turned off. A service that is off stays listed here, but no
+    deploys or health checks are collected for it, it opens no incidents, and it is
+    hidden from the console. What was recorded before stays and reappears when it is
+    turned back on. Newly monitored services are synced in the background.
+    """
+    integration = await get_or_404(session, models.Integration, integration_id)
+    rows = (
+        await session.scalars(
+            select(models.Service).where(models.Service.integration_id == integration.id)
+        )
+    ).all()
+    wanted = set(body.service_ids)
+    unknown = wanted - {row.id for row in rows}
+    if unknown:
+        raise HTTPException(422, "Some of those services do not belong to this integration")
+    turned_on = [row.id for row in rows if row.id in wanted and not row.monitored]
+    for row in rows:
+        row.monitored = row.id in wanted
+    await session.commit()
+    if turned_on and not integration.is_demo:
+        await get_queue().enqueue("sync_integration", integration.id, turned_on)
+    return await _services(session, integration_id)
+
+
+async def _services(session: SessionDep, integration_id: str) -> list[schemas.Service]:
+    rows = await session.scalars(
+        select(models.Service)
+        .where(models.Service.integration_id == integration_id)
+        .order_by(models.Service.name)
+    )
+    return [await service_out(session, row) for row in rows.all()]
 
 
 @router.delete("/{integration_id}")
