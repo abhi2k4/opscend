@@ -1,18 +1,18 @@
 "use client";
 
-import { ExternalLink, FileDiff, GitBranch, ScrollText, Sparkles, Terminal } from "lucide-react";
+import { ExternalLink, FileDiff, GitBranch, GitCompareArrows, ScrollText, Sparkles, Terminal } from "lucide-react";
 import { motion } from "motion/react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { InvestigateButton, useNow } from "@/components/console/deploys";
-import { DiffView, LogViewer } from "@/components/console/logs";
+import { ChangesView, DiffView, LogViewer } from "@/components/console/logs";
 import { ButtonLink, Empty, HealthBadge, Mono, Panel, Skeleton, StatusBadge, Tag } from "@/components/ui/primitives";
 import { ProviderTile, providerName } from "@/components/ui/provider";
 import { useApi } from "@/lib/api";
 import { cn, duration, firstLine, shortSha, timeAgo } from "@/lib/format";
 import type { DeploymentDetail, LogLine } from "@/lib/types";
 
-type Tab = "build" | "runtime" | "diff";
+type Tab = "build" | "runtime" | "diff" | "changes";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -55,6 +55,7 @@ function DeployDetail() {
     { id: "build", label: "Build logs", icon: Terminal, show: d.capabilities.includes("BUILD_LOGS") },
     { id: "runtime", label: "Runtime logs", icon: ScrollText, show: d.capabilities.includes("RUNTIME_LOGS") },
     { id: "diff", label: "Commit diff", icon: FileDiff, show: !!d.commit_sha },
+    { id: "changes", label: "What changed", icon: GitCompareArrows, show: true },
   ];
   const visible = tabs.filter((t) => t.show);
   const current = visible.find((t) => t.id === tab) ?? visible[0];
@@ -124,10 +125,10 @@ function DeployDetail() {
             <Mono value={d.id} display={`id ${d.id.length > 14 ? `${d.id.slice(0, 12)}…` : d.id}`} />
           </span>
         </div>
-        {!current && <Empty title="This provider exposes no logs">Its capability manifest lists neither build nor runtime logs.</Empty>}
         {current?.id === "build" && <LogViewer deploymentId={d.id} kind="build" focusId={focusLog} />}
         {current?.id === "runtime" && <LogViewer deploymentId={d.id} kind="runtime" focusId={focusLog} />}
         {current?.id === "diff" && <DiffView deploymentId={d.id} />}
+        {current?.id === "changes" && <ChangesView deploymentId={d.id} />}
       </Panel>
     </>
   );

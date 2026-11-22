@@ -28,6 +28,10 @@ class Investigation(Base):
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # The reader's verdict on the report: "up", "down" or not rated.
+    feedback_rating: Mapped[str | None] = mapped_column(String(8))
+    feedback_note: Mapped[str | None] = mapped_column(Text)
+    feedback_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     steps: Mapped[list["InvestigationStep"]] = relationship(
         order_by="InvestigationStep.index", lazy="selectin", cascade="all, delete-orphan"

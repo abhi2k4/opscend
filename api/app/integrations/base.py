@@ -12,7 +12,15 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 import httpx
 from pydantic import BaseModel, Field
 
-from app.schemas import Capability, CommitDiff, DeployStatus, LogKind, LogLevel, ProviderManifest
+from app.schemas import (
+    Capability,
+    ChangedFile,
+    CommitDiff,
+    DeployStatus,
+    LogKind,
+    LogLevel,
+    ProviderManifest,
+)
 
 DEFAULT_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 
@@ -65,6 +73,14 @@ class CommitIn(BaseModel):
     author: str
     committed_at: datetime
     url: str | None = None
+
+
+class Comparison(BaseModel):
+    """Everything between two commits of one repo: `base` excluded, `head` included."""
+
+    commits: list[CommitIn] = Field(default_factory=list)
+    files: list[ChangedFile] = Field(default_factory=list)
+    truncated: bool = False
 
 
 class LogLineIn(BaseModel):
@@ -157,6 +173,8 @@ class CommitSource(Protocol):
     async def list_commits(self, repo: str, since: datetime) -> list[CommitIn]: ...
 
     async def get_commit_diff(self, repo: str, sha: str) -> CommitDiff: ...
+
+    async def compare(self, repo: str, base: str, head: str) -> Comparison: ...
 
 
 class HttpAdapter:
