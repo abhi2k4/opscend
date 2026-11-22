@@ -25,7 +25,7 @@ const STEPS = [
 ];
 
 const PROVIDERS = [
-  { name: "Vercel", token: "Access token", href: "https://vercel.com/account/settings/tokens", gives: "Projects, deploys, build logs" },
+  { name: "Vercel", token: "Access token", href: "https://vercel.com/account/settings/tokens", gives: "Projects, deploys, build and runtime logs" },
   { name: "Railway", token: "Account or workspace token", href: "https://railway.com/account/tokens", gives: "Services, deploys, build and runtime logs" },
   { name: "Render", token: "API key", href: "https://dashboard.render.com/u/settings#api-keys", gives: "Services, deploys, build and runtime logs" },
   { name: "Fly.io", token: "Read-only access token", href: "https://fly.io/docs/security/tokens/", gives: "Apps, releases, recent runtime logs" },

@@ -13,7 +13,7 @@ import { Lines, Rise, Rule, Section } from "./reveal";
 // ───────────────────────────── integrations
 
 const PROVIDERS = [
-  { id: "vercel", via: "REST", caps: "deploys · build logs · webhooks" },
+  { id: "vercel", via: "REST", caps: "deploys · build + runtime logs · webhooks" },
   { id: "railway", via: "GraphQL", caps: "deploys · build + runtime logs" },
   { id: "render", via: "REST", caps: "deploys · build + runtime logs" },
   { id: "fly", via: "GraphQL", caps: "releases · runtime logs" },
