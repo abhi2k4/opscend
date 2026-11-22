@@ -3,6 +3,7 @@
 import json
 from datetime import timedelta
 
+import httpx
 import pytest
 from sqlalchemy import select
 
@@ -14,7 +15,7 @@ from app.chat.tools import CHAT_TOOL_SPECS, ChatLedger, ChatTools
 from app.core.db import session_scope
 from app.core.time import utcnow
 from app.integrations.base import LogLineIn
-from app.investigator.llm import LLMResponse
+from app.investigator.llm import LLMError, LLMResponse, _parse
 from app.investigator.tools import TOOL_SPECS
 from app.models import ChatMessage, ChatSession, Commit, HealthCheck, Incident, LogLine
 from app.services.logs import to_rows
@@ -345,6 +346,36 @@ async def test_empty_answer_fails_the_message_and_records_why(database):
     message = await reply(message_id)
     assert message.status == "failed" and "empty answer" in message.error
     await run_chat_reply(message_id, FakeLLM(answer("late")))  # only pending messages run
+    assert (await reply(message_id)).status == "failed"
+
+
+def test_provider_rejection_of_an_invented_tool_is_recognised():
+    body = {
+        "error": {
+            "message": "Tool call validation failed: tool call validation failed: attempted to "
+            "call tool 'search_incidents' which was not in request.tools",
+            "code": "tool_use_failed",
+        }
+    }
+    with pytest.raises(LLMError) as caught:
+        _parse(httpx.Response(400, json=body))
+    assert caught.value.unknown_tool == "search_incidents"
+
+
+async def test_an_invented_tool_is_corrected_instead_of_failing_the_answer(database):
+    message_id = await pending_question("Any open incidents?")
+    rejected = LLMError(
+        "model API error (HTTP 400)", retryable=True, unknown_tool="search_incidents"
+    )
+    llm = FakeLLM(rejected, rejected, answer("No open incidents."))
+    await run_chat_reply(message_id, llm)
+    message = await reply(message_id)
+    assert message.status == "done" and message.content == "No open incidents."
+    note = llm.requests[-1]["messages"][-1]["content"]
+    assert "search_incidents" in note and "list_incidents" in note
+    # A third invention in a row is a real failure, not something to keep correcting.
+    message_id = await pending_question("Again?")
+    await run_chat_reply(message_id, FakeLLM(rejected))
     assert (await reply(message_id)).status == "failed"
 
 
