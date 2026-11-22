@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Capability(StrEnum):
@@ -393,6 +393,24 @@ class ChatStep(Schema):
     duration_ms: int | None
 
 
+class ChatChartSeries(Schema):
+    name: str
+    tone: Literal["ok", "err", "muted", "info"]
+    values: list[float | None]
+
+
+class ChatChart(Schema):
+    """A chart the tools built from stored data. The answer places it as `[chart:<id>]`."""
+
+    id: str
+    kind: Literal["bars", "line"]
+    title: str
+    subtitle: str | None
+    unit: str
+    categories: list[str]
+    series: list[ChatChartSeries]
+
+
 class ChatMessage(Schema):
     id: str
     index: int
@@ -401,11 +419,17 @@ class ChatMessage(Schema):
     status: Literal["pending", "running", "done", "failed"]
     error: str | None
     citations: list[ChatCitation]
+    charts: list[ChatChart] = Field(default_factory=list)
     steps: list[ChatStep]
     model: str | None
     tokens: int
     created_at: datetime
     finished_at: datetime | None
+
+    @field_validator("charts", mode="before")
+    @classmethod
+    def _no_charts(cls, value: object) -> object:
+        return value or []  # rows written before charts existed hold NULL
 
 
 class ChatSessionSummary(Schema):

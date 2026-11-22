@@ -61,7 +61,9 @@ Developer conveniences: `⌘K` command palette (type a question to send it to As
 A chat assistant over everything Opscend has collected. Ask "which services had failed deploys this week?", "search the logs for ECONNREFUSED" or "what's our failure rate and recovery time per service?".
 
 - Same model settings and limits as the investigator (`OPSCEND_AI_MAX_TOOL_CALLS`, `OPSCEND_AI_TOKEN_BUDGET`, per answer).
-- The investigator's five tools plus six read-only query tools: `list_services`, `search_deployments`, `search_logs`, `list_incidents`, `list_commits`, `deploy_stats`. There is no free-form SQL.
+- The investigator's five tools plus seven read-only query tools: `list_services`, `search_deployments`, `search_logs`, `list_incidents`, `list_commits`, `deploy_stats`, `deploy_trend`. There is no free-form SQL.
+- It reads the intent first: a greeting or a question about itself gets a direct reply, and only questions about your data reach the tools.
+- **Charts in answers.** Questions about trends, comparisons or response times get a chart in the reply (deploys per day or hour, deploys by service, response time). The numbers are computed by the tools from stored data, never written by the model, and every chart has a table view.
 - Every `[deploy:…]`, `[log:…]` or `[commit:…]` citation is checked against what the tools actually returned; invented ids are removed before the answer is saved.
 - Answers run as jobs (like investigations) and the UI polls for progress, so they work the same with inline jobs and the arq worker.
 - Log search covers stored lines. On Postgres it uses a trigram index (`pg_trgm`, created by migration 0004 when the database user is allowed to).

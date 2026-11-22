@@ -6,6 +6,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
+from app import schemas
 from app.chat import citations
 from app.chat.orchestrator import BUDGET_NOTE, run_chat_reply
 from app.chat.service import NOT_PICKED_UP, expire_stale_replies
@@ -123,6 +124,7 @@ async def test_chat_tools_are_read_only_and_extend_the_investigators(t):
         "list_incidents",
         "list_commits",
         "deploy_stats",
+        "deploy_trend",
     }
     public = {
         name
@@ -209,7 +211,7 @@ async def test_citations_keep_verified_ids_and_drop_invented_ones(t):
         f"[service:{ids['api']}]. Also [deploy:made-up-id] and [log:log_0000000000]."
     )
     async with session_scope() as session:
-        cleaned, cited = await citations.resolve(session, text, t.ledger)
+        cleaned, cited, _ = await citations.resolve(session, text, t.ledger)
     assert "made-up-id" not in cleaned and "log_0000000000" not in cleaned
     assert cleaned.endswith("Also and.")
     assert f"[commit:{SHA}]" in cleaned  # canonicalized to the full sha
@@ -234,7 +236,7 @@ async def test_citations_repair_common_model_slips(t):
         "Kept: [build, runtime] and [x]."
     )
     async with session_scope() as session:
-        cleaned, cited = await citations.resolve(session, text, t.ledger)
+        cleaned, cited, _ = await citations.resolve(session, text, t.ledger)
     assert cleaned == (
         f"Crashed [log:{log_id}] twice [log:{log_id}] in [deploy:{deploy_id}]; "
         f"see [log:{log_id}] [deploy:{deploy_id}]. Rate 6%. Kept: [build, runtime] and [x]."
@@ -438,3 +440,102 @@ async def test_conversation_round_trip(chat_client):
     assert (await client.post("/api/chat/sessions", json={"content": ""})).status_code == 422
     assert (await client.delete(f"/api/chat/sessions/{chat['id']}")).status_code == 204
     assert (await client.get(f"/api/chat/sessions/{chat['id']}")).status_code == 404
+
+
+def test_optional_tool_parameters_accept_null():
+    """Models send null for filters they do not use; the provider rejects it unless the schema allows it."""
+    for spec in CHAT_TOOL_SPECS:
+        parameters = spec["function"]["parameters"]
+        for name, schema in parameters["properties"].items():
+            optional = name not in parameters["required"]
+            assert ("null" in schema["type"]) is optional, (spec["function"]["name"], name)
+            if optional and "enum" in schema:
+                assert None in schema["enum"]
+
+
+def test_the_prompt_tells_the_model_to_read_intent_before_using_tools():
+    from app.chat.prompts import SYSTEM_PROMPT
+
+    assert "First decide what the message is asking for" in SYSTEM_PROMPT
+    assert "call no tools" in SYSTEM_PROMPT
+
+
+# ───────────────────────────── charts
+
+
+async def test_tools_build_charts_from_stored_data(t):
+    await world()
+    stats = await t.call("deploy_stats", {"since_hours": 24})
+    assert "Chart ready" in stats
+    [(chart_id, chart)] = t.ledger.charts.items()
+    assert f"[chart:{chart_id}]" in stats
+    assert (chart["kind"], chart["unit"]) == ("bars", "deploys")
+    assert chart["categories"] == ["storefront-api", "storefront-web"]
+    series = {item["name"]: item["values"] for item in chart["series"]}
+    # API: one failure then a recovery (plus an older ready deploy); web: one ready deploy.
+    assert series == {"Ready": [2.0, 1.0], "Failed": [1.0, 0.0]}  # the empty "Other" is dropped
+
+    trend = await t.call("deploy_trend", {"service": "storefront-api", "since_hours": 24})
+    assert "Deploys per hour" in trend and "Chart ready" in trend
+    hourly = list(t.ledger.charts.values())[1]
+    assert hourly["title"] == "Deploys per hour for storefront-api"
+    assert len(hourly["categories"]) in (25, 26)
+    assert sum(sum(item["values"]) for item in hourly["series"]) == 3
+
+    daily = await t.call("deploy_trend", {"since_hours": 24 * 60})
+    assert "Deploys per day" in daily
+    assert len(list(t.ledger.charts.values())[2]["categories"]) in (61, 62)
+
+    assert "no service matches" in await t.call("deploy_trend", {"service": "billing"})
+    assert len(t.ledger.charts) == 3
+
+
+async def test_a_chart_needs_more_than_one_point(t):
+    assert t.ledger.add_chart("bars", "One bar", "deploys", ["a"], [("Ready", "ok", [3.0])]) == ""
+    assert (
+        t.ledger.add_chart("bars", "Empty", "deploys", ["a", "b"], [("Ready", "ok", [0, 0])]) == ""
+    )
+    assert t.ledger.charts == {}
+
+
+async def test_only_charts_a_tool_built_survive_and_each_appears_once(t):
+    await world()
+    await t.call("deploy_stats", {"since_hours": 24})
+    [chart_id] = t.ledger.charts
+    text = (
+        f"Deploys were mostly fine. [chart:{chart_id}] The API failed once. "
+        f"[chart:chart_9invented] Again: [chart:{chart_id}]."
+    )
+    async with session_scope() as session:
+        cleaned, _, charts = await citations.resolve(session, text, t.ledger)
+    assert [chart["id"] for chart in charts] == [chart_id]
+    assert (
+        cleaned
+        == f"Deploys were mostly fine.\n\n[chart:{chart_id}]\n\nThe API failed once. Again:."
+    )
+    assert "invented" not in cleaned
+
+
+async def test_reply_stores_its_chart_and_history_drops_the_marker(database):
+    await world()
+    first_id = await pending_question("How have deploys been going?")
+    seen: dict[str, str] = {}
+
+    def conclude(request):
+        tool_output = request["messages"][-1]["content"]
+        seen["id"] = tool_output.split("[chart:")[1].split("]")[0]
+        return answer(f"Mostly green, one failure.\n\n[chart:{seen['id']}]")
+
+    await run_chat_reply(first_id, FakeLLM(turn(("deploy_trend", {"since_hours": 24})), conclude))
+    message = await reply(first_id)
+    assert message.status == "done"
+    assert [chart["id"] for chart in message.charts] == [seen["id"]]
+    assert message.charts[0]["kind"] == "bars"
+    assert schemas.ChatMessage.model_validate(message).charts[0].series[0].tone == "ok"
+
+    follow_up = await pending_question("And yesterday?", session_id=message.session_id)
+    llm = FakeLLM(answer("Same picture."))
+    await run_chat_reply(follow_up, llm)
+    history = json.dumps(llm.requests[0]["messages"][2:])  # after the two system messages
+    assert "Mostly green" in history and "[chart:" not in history
+    assert (await reply(follow_up)).charts == []

@@ -305,6 +305,19 @@ export interface ChatCitation {
   url: string | null;
 }
 
+/** A chart built by the chat tools from stored data. The answer places it as `[chart:<id>]`. */
+export interface ChatChart {
+  id: string;
+  /** "bars": stacked columns per category. "line": one line per series. */
+  kind: "bars" | "line";
+  title: string;
+  subtitle: string | null;
+  /** What the y-axis counts, e.g. "deploys" or "ms". */
+  unit: string;
+  categories: string[];
+  series: { name: string; tone: "ok" | "err" | "muted" | "info"; values: (number | null)[] }[];
+}
+
 export interface ChatStep {
   /** Tool name. */
   name: string;
@@ -318,12 +331,13 @@ export interface ChatMessage {
   id: string;
   index: number;
   role: "user" | "assistant";
-  /** Markdown-ish text with `[type:ref]` citation markers. */
+  /** Markdown-ish text with `[type:ref]` citation markers and `[chart:id]` lines. */
   content: string;
   /** User messages are always "done"; assistant messages start "pending". */
   status: "pending" | "running" | "done" | "failed";
   error: string | null;
   citations: ChatCitation[];
+  charts: ChatChart[];
   steps: ChatStep[];
   model: string | null;
   tokens: number;

@@ -6,7 +6,8 @@ import { Fragment, useState, type ReactNode } from "react";
 import { useNow } from "@/components/console/deploys";
 import { Dot, Spinner } from "@/components/ui/primitives";
 import { cn, duration } from "@/lib/format";
-import type { ChatCitation, ChatCitationType, ChatMessage, ChatStep } from "@/lib/types";
+import type { ChatChart, ChatCitation, ChatCitationType, ChatMessage, ChatStep } from "@/lib/types";
+import { ChatChartView } from "./chat-chart";
 
 // ───────────────────────────── citations
 
@@ -100,7 +101,7 @@ function Inline({ text, citations }: { text: string; citations: Map<string, Chat
   );
 }
 
-type Block = { kind: "p"; lines: string[] } | { kind: "ul" | "ol"; items: string[] } | { kind: "code"; text: string };
+type Block = { kind: "p"; lines: string[] } | { kind: "ul" | "ol"; items: string[] } | { kind: "code"; text: string } | { kind: "chart"; id: string };
 
 function toBlocks(content: string): Block[] {
   const blocks: Block[] = [];
@@ -111,6 +112,11 @@ function toBlocks(content: string): Block[] {
       const body: string[] = [];
       for (i++; i < lines.length && !lines[i].trim().startsWith("```"); i++) body.push(lines[i]);
       blocks.push({ kind: "code", text: body.join("\n") });
+      continue;
+    }
+    const chart = /^\s*\[chart:([^\]\s]+)\]\s*$/.exec(line);
+    if (chart) {
+      blocks.push({ kind: "chart", id: chart[1] });
       continue;
     }
     const bullet = /^\s*[-*•]\s+(.*)$/.exec(line);
@@ -134,11 +140,16 @@ function toBlocks(content: string): Block[] {
   return blocks.filter((b) => (b.kind === "p" ? b.lines.length > 0 : true));
 }
 
-export function AnswerText({ content, citations }: { content: string; citations: ChatCitation[] }) {
+export function AnswerText({ content, citations, charts = [] }: { content: string; citations: ChatCitation[]; charts?: ChatChart[] }) {
   const byKey = new Map(citations.map((c) => [`${c.type}:${c.ref}`, c]));
+  const chartById = new Map(charts.map((c) => [c.id, c]));
   return (
     <div className="space-y-2.5 text-[13.5px] leading-[1.7] text-fg/90">
       {toBlocks(content).map((block, i) => {
+        if (block.kind === "chart") {
+          const chart = chartById.get(block.id);
+          return chart ? <ChatChartView key={i} chart={chart} /> : null;
+        }
         if (block.kind === "code") {
           return (
             <pre key={i} className="code overflow-x-auto rounded-md border border-line bg-bg p-3 text-muted">
@@ -237,7 +248,7 @@ export function MessageView({ message }: { message: ChatMessage }) {
       <div className="min-w-0 flex-1">
         <StepList steps={message.steps} live={live} />
         {live && <Thinking message={message} />}
-        {message.status === "done" && <AnswerText content={message.content} citations={message.citations} />}
+        {message.status === "done" && <AnswerText content={message.content} citations={message.citations} charts={message.charts} />}
         {message.status === "failed" && (
           <div className="rounded-md border border-err/30 bg-err/5 px-3 py-2 text-[12.5px] text-err">
             Could not answer: {message.error ?? "unknown error"}
