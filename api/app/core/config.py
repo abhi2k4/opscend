@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     ai_base_url: str = Field("https://api.groq.com/openai/v1", alias="OPSCEND_AI_BASE_URL")
     ai_max_tool_calls: int = Field(8, alias="OPSCEND_AI_MAX_TOOL_CALLS")
     ai_token_budget: int = Field(40_000, alias="OPSCEND_AI_TOKEN_BUDGET")
+    # Investigate a failed deploy as soon as its incident opens, up to a daily cap.
+    auto_investigate: bool = Field(True, alias="OPSCEND_AUTO_INVESTIGATE")
+    auto_investigate_daily_limit: int = Field(20, alias="OPSCEND_AUTO_INVESTIGATE_DAILY_LIMIT")
 
     # Email alerts. Leave OPSCEND_SMTP_HOST empty to keep notifications in-app only.
     smtp_host: str | None = Field(None, alias="OPSCEND_SMTP_HOST")

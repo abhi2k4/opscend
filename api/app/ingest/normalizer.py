@@ -13,7 +13,8 @@ from app.core.time import utcnow
 from app.incidents import rules
 from app.integrations.base import CommitIn, DeploymentIn, NormalizedBatch
 from app.integrations.registry import get_adapter_class
-from app.models import Commit, Deployment, RawEvent, Service
+from app.investigator.service import auto_investigate
+from app.models import Commit, Deployment, Incident, RawEvent, Service
 
 log = logging.getLogger(__name__)
 
@@ -64,11 +65,20 @@ async def process_raw_event(event_id: str) -> None:
 async def apply_batch(session: AsyncSession, provider: str, batch: NormalizedBatch) -> None:
     for commit in batch.commits:
         await _upsert_commit(session, commit)
+    opened: list[Incident] = []
     for incoming in sorted(batch.deployments, key=lambda d: d.started_at):
         deployment = await _upsert_deployment(session, provider, incoming)
         if deployment is not None:
-            await rules.on_deployment(session, deployment)
+            incident = await rules.on_deployment(session, deployment)
+            if incident is not None:
+                opened.append(incident)
     await session.commit()
+    # Only once the incident is stored: the investigation job reads it from the database.
+    for incident in opened:
+        try:
+            await auto_investigate(session, incident)
+        except Exception:  # an investigation that cannot start must not fail ingestion
+            log.exception("could not start an automatic investigation for %s", incident.id)
 
 
 async def _upsert_commit(session: AsyncSession, incoming: CommitIn) -> None:

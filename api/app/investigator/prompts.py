@@ -17,6 +17,9 @@ Evidence rules:
 - Every claim must cite evidence you actually saw: a log line id (log_...), a commit \
 sha, a deployment_id, or a service_id (for health history). Never invent an id.
 - Name a culprit commit only if its diff plausibly produces the error in the logs.
+- A cause needs a log line (or health check) that shows the failure itself. If the build \
+logs end cleanly and you could not read runtime logs showing an error, you do not know \
+why it failed: report inconclusive instead of inferring a cause from the diff alone.
 - If the data does not support a cause, set inconclusive=true, confidence="low", and say \
 in `missing` what you would need. An honest "inconclusive" beats a confident guess.
 

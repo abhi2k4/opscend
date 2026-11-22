@@ -1,12 +1,18 @@
 """Starting investigations: the checks and bookkeeping before the job is queued."""
 
+import logging
+from datetime import timedelta
+
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.queue import get_queue
-from app.models import Deployment, Investigation
+from app.core.time import utcnow
+from app.models import Deployment, Incident, Investigation
+
+log = logging.getLogger(__name__)
 
 NOT_CONFIGURED = (
     "The AI investigator is not configured. Set GROQ_API_KEY in .env "
@@ -54,3 +60,32 @@ async def start_investigation(
     await session.refresh(investigation, ["steps"])
     await get_queue().enqueue("investigate", investigation.id)
     return investigation
+
+
+async def auto_investigate(session: AsyncSession, incident: Incident) -> Investigation | None:
+    """Investigate a freshly opened deploy incident without waiting for a click.
+
+    Does nothing when it is switched off, no LLM key is set, the deploy already has
+    an investigation, or today's cap is used up (the cap counts every investigation
+    of the last 24 hours, so a burst of failures cannot drain the LLM quota).
+    """
+    settings = get_settings()
+    if not (settings.auto_investigate and settings.ai_configured and incident.deployment_id):
+        return None
+    deployment = await session.get(Deployment, incident.deployment_id)
+    if deployment is None:
+        return None
+    already = await session.scalar(
+        select(Investigation.id).where(Investigation.deployment_id == deployment.id).limit(1)
+    )
+    if already is not None:
+        return None
+    recent = await session.scalar(
+        select(func.count(Investigation.id)).where(
+            Investigation.created_at >= utcnow() - timedelta(hours=24)
+        )
+    )
+    if (recent or 0) >= settings.auto_investigate_daily_limit:
+        log.info("auto-investigation skipped for %s: daily limit reached", incident.id)
+        return None
+    return await start_investigation(session, deployment=deployment, incident_id=incident.id)

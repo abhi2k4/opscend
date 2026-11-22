@@ -122,9 +122,10 @@ def finalize_report(
 ) -> tuple[InvestigationReport, list[str]]:
     """Check every evidence ref against what the tools really returned.
 
-    Unverifiable refs are dropped. Losing evidence caps confidence at medium; a
-    conclusion left with no evidence at all is downgraded to low. Returns the
-    report and human-readable notes about what was changed.
+    Unverifiable refs are dropped. Losing evidence caps confidence at medium. A
+    conclusion that cites no log line or health check is a reading of the diff, not
+    of the failure, so it is capped at low; one left with no evidence at all is
+    reported as inconclusive. Returns the report and notes about what was changed.
     """
     notes: list[str] = []
     evidence: list[EvidenceRef] = []
@@ -151,15 +152,21 @@ def finalize_report(
             notes.append("removed a culprit commit that no tool output contained")
 
     missing = draft.missing
-    if draft.inconclusive:
+    inconclusive = draft.inconclusive
+    if inconclusive:
         confidence = "low"
         missing = missing or "The available logs and diffs did not point to a single cause."
     elif not evidence:
+        inconclusive, confidence, culprit = True, "low", None
+        missing = missing or "No log line, commit or deploy that the tools returned backs this up."
+        notes.append("no verifiable evidence: reported as inconclusive")
+    elif not any(item.type in ("log", "health") for item in evidence):
+        if confidence != "low":
+            notes.append("no log or health evidence of the failure itself: confidence set to low")
         confidence = "low"
-        notes.append("no verifiable evidence: confidence downgraded to low")
 
     report = InvestigationReport(
-        inconclusive=draft.inconclusive,
+        inconclusive=inconclusive,
         likely_cause=draft.likely_cause.strip(),
         confidence=confidence,
         summary=draft.summary.strip(),
