@@ -30,6 +30,7 @@ services:
 
   api:
     build: ./api
+    image: opscend-api
     env_file:
       - path: .env
         required: false
@@ -53,7 +54,9 @@ services:
 
   # Runs every job: webhook normalization, polling (60s), health checks (60s), investigations.
   worker:
+    # Same image as the API, so rebuilding one can never leave the other on old code.
     build: ./api
+    image: opscend-api
     command: ["arq", "app.worker.WorkerSettings"]
     env_file:
       - path: .env
