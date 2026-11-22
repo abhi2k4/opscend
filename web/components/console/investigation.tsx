@@ -50,12 +50,12 @@ export function TraceView({ inv }: { inv: Investigation }) {
   return (
     <div>
       {/* root span */}
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(80px,38%)_58px] items-center gap-3 border-b border-line px-4 py-2.5 font-mono text-[12px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_58px] items-center sm:grid-cols-[minmax(0,1fr)_minmax(80px,38%)_58px] gap-3 border-b border-line px-4 py-2.5 font-mono text-[12px]">
         <span className="flex items-center gap-2 truncate">
           <span className="text-faint">agent run:</span> <span className="text-fg">&apos;investigator&apos;</span>
           <span className="rounded-sm bg-raised px-1 text-[10.5px] text-muted">{inv.steps.length}</span>
         </span>
-        <span className="relative h-1.5 overflow-hidden rounded-full bg-line">
+        <span className="relative h-1.5 overflow-hidden rounded-full bg-line max-sm:hidden">
           <span className={cn("absolute inset-0 rounded-full bg-fg/60", running && "animate-pulse")} />
         </span>
         <span className="text-right text-muted">{duration(inv.duration_ms ?? (running ? total : null))}</span>
@@ -92,16 +92,16 @@ function SpanRow({ s, t0, total, now, open, onToggle }: { s: InvestigationStep; 
       <button
         onClick={onToggle}
         aria-expanded={open}
-        className={cn("grid w-full grid-cols-[minmax(0,1fr)_minmax(80px,38%)_58px] items-center gap-3 px-4 py-[7px] text-left font-mono text-[12px] transition-colors hover:bg-raised/60", open && "bg-raised/60")}
+        className={cn("grid w-full grid-cols-[minmax(0,1fr)_58px] items-center sm:grid-cols-[minmax(0,1fr)_minmax(80px,38%)_58px] gap-3 px-4 py-[7px] text-left font-mono text-[12px] transition-colors hover:bg-raised/60", open && "bg-raised/60")}
       >
         <span className="flex min-w-0 items-center gap-2" style={{ paddingLeft: s.type === "tool" ? 18 : 0 }}>
           <ChevronRight size={11} className={cn("shrink-0 text-faint transition-transform", open && "rotate-90")} />
           <meta.icon size={12} className="shrink-0" style={{ color }} />
           <span className="shrink-0 text-faint">{meta.label}:</span>
-          <span className={cn("text-fg", s.type === "tool" ? "shrink-0" : "truncate")}>{s.name}</span>
+          <span className={cn("text-fg", s.type === "tool" ? "truncate xl:shrink-0" : "truncate")}>{s.name}</span>
           {s.type === "tool" && <span className="hidden truncate text-faint xl:inline">{argPreview(s.input)}</span>}
         </span>
-        <span className="relative h-1.5 rounded-full bg-line/50">
+        <span className="relative h-1.5 rounded-full bg-line/50 max-sm:hidden">
           <span
             className={cn("absolute inset-y-0 rounded-full transition-[width] duration-100", live && "animate-pulse")}
             style={{ left: `${Math.min(98.5, left)}%`, width: `${Math.min(100 - Math.min(98.5, left), width)}%`, background: color }}

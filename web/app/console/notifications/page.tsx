@@ -59,7 +59,7 @@ export default function NotificationsPage() {
         }
       />
 
-      <div className="grid items-start gap-4 xl:grid-cols-[1fr_380px]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Panel>
           {!data && !error && <div className="space-y-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</div>}
           {error && !data && <Empty title="Could not load notifications">{error.message}</Empty>}

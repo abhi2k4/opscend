@@ -287,7 +287,7 @@ export function Suggestions({ onPick, children }: { onPick: (q: string) => void;
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-12 text-center">
       {children}
-      <div className="mt-6 grid w-full gap-2 sm:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 w-full gap-2 sm:grid-cols-2">
         {questions.map((q) => (
           <button key={q} onClick={() => onPick(q)} className="rounded-lg border border-line bg-surface px-3 py-2.5 text-left text-[12.5px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-fg">
             {q}

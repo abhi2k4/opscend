@@ -33,7 +33,7 @@ export default function EventsPage() {
         }
       />
 
-      <div className="grid items-start gap-4 xl:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Panel>
           <div className="grid grid-cols-[16px_70px_minmax(0,1fr)_auto] gap-3 border-b border-line px-4 py-2 font-mono text-[10.5px] uppercase tracking-wider text-faint sm:grid-cols-[16px_70px_90px_minmax(0,1fr)_minmax(0,1.2fr)_auto]">
             <span />
