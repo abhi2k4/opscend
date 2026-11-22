@@ -8,8 +8,10 @@ from sqlalchemy import select
 from app import schemas
 from app.core.db import session_scope
 from app.core.time import utcnow
+from app.integrations.base import LogLineIn
 from app.models import Commit, CommitDiff, Investigation
-from app.services.changes import NO_BASELINE, SAME_COMMIT, get_changes
+from app.services.changes import NO_BASELINE, SAME_COMMIT, _mentions, get_changes
+from app.services.logs import to_rows
 from tests.conftest import drain_jobs, make_deployment, make_service
 from tests.test_api import ai_client  # noqa: F401  (fixture)
 
@@ -181,3 +183,87 @@ async def test_demo_failed_deploy_has_a_changes_view(demo_client):
     assert changes.note is None  # demo data never asks GitHub, and says nothing about it
     async with session_scope() as session:
         assert await session.scalar(select(Investigation.id).limit(1)) is not None
+
+
+# ───────────────────────────── suspect files
+
+
+def test_a_file_is_recognised_in_the_forms_logs_use():
+    unique = {"config.py", "env.ts"}
+    # Python traceback: exact path, with a line number.
+    assert _mentions('File "app/config.py", line 14, in <module>', "app/config.py", unique) == (
+        True,
+        14,
+    )
+    # path:line:col, as Node prints it.
+    assert _mentions("at load (src/config/env.ts:21:28)", "src/config/env.ts", unique) == (True, 21)
+    # A compiled copy: same folder and stem, another extension. Its line number is not ours.
+    assert _mentions("at /app/dist/config/env.js:21:28", "src/config/env.ts", unique) == (
+        True,
+        None,
+    )
+    # A bare filename counts only when no other changed file shares it.
+    assert _mentions("see index.ts", "a/index.ts", set()) == (False, None)
+    assert _mentions("nothing relevant here", "app/config.py", unique) == (False, None)
+
+
+@respx.mock
+async def test_files_the_failure_points_at_are_flagged_and_linked(database):
+    respx.get(f"https://api.github.com/repos/acme/storefront/compare/{GOOD}...{BAD}").respond(
+        json={
+            "total_commits": 0,
+            "commits": [],
+            "files": [
+                {"filename": "app/config.py", "status": "modified", "additions": 1, "deletions": 1},
+                {
+                    "filename": "docs/read me.md",
+                    "status": "modified",
+                    "additions": 2,
+                    "deletions": 0,
+                },
+                {"filename": "app/old.py", "status": "removed", "additions": 0, "deletions": 9},
+            ],
+        }
+    )
+    async with session_scope() as session:
+        service = await make_service(session)
+        await make_service(session, provider="github", name="repo", external_id="acme/storefront")
+        await make_deployment(session, service, status="ready", minutes_ago=60, sha=GOOD)
+        failed = await make_deployment(session, service, status="failed", minutes_ago=5, sha=BAD)
+        session.add_all(
+            to_rows(
+                failed.id,
+                "runtime",
+                [
+                    LogLineIn(ts=utcnow(), level="info", message="docs/read me.md was read"),
+                    LogLineIn(ts=utcnow(), level="error", message='File "app/config.py", line 14'),
+                ],
+            )
+        )
+        await session.commit()
+        config, readme, old = (await get_changes(session, failed)).files
+
+    assert (config.suspect, config.suspect_reason, config.line) == (
+        True,
+        "appears in the error logs",
+        14,
+    )
+    assert config.url == f"https://github.com/acme/storefront/blob/{BAD}/app/config.py#L14"
+    # Only error lines count, and the path is escaped for the link.
+    assert readme.suspect is False
+    assert readme.url == f"https://github.com/acme/storefront/blob/{BAD}/docs/read%20me.md"
+    # A removed file no longer exists at the new commit, so its link goes to the old one.
+    assert old.url == f"https://github.com/acme/storefront/blob/{GOOD}/app/old.py"
+
+
+async def test_demo_failure_marks_a_changed_file_as_suspect(demo_client):
+    [failed] = (
+        await demo_client.get(
+            "/api/deployments", params={"status": "failed", "provider": "railway"}
+        )
+    ).json()
+    files = (await demo_client.get(f"/api/deployments/{failed['id']}/changes")).json()["files"]
+    suspects = [file["filename"] for file in files if file["suspect"]]
+    # The trace passes through two changed files; the investigation names one of them.
+    assert suspects == ["apps/api/src/config/env.ts"]
+    assert all(file["url"].startswith("https://github.com/") for file in files)

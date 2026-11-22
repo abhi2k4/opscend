@@ -43,13 +43,13 @@ export default function InvestigationsPage() {
           </Empty>
         )}
         {data?.map((inv) => (
-          <Link key={inv.id} href={`/console/investigations/${inv.id}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-line-soft px-4 py-3.5 transition-colors last:border-0 hover:bg-raised/50">
-            <Tag color={STATUS_COLOR[inv.status]}>
+          <Link key={inv.id} href={`/console/investigations/${inv.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b border-line-soft px-4 py-3.5 transition-colors last:border-0 hover:bg-raised/50 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+            <Tag className="justify-self-start max-sm:col-span-2" color={STATUS_COLOR[inv.status]}>
               <Dot color={STATUS_COLOR[inv.status]} pulse={inv.status === "running"} className="scale-75" /> {inv.status}
             </Tag>
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[13.5px]">
-                <span className="font-medium">{inv.service_name ?? "—"}</span>
+                <span className="truncate font-medium">{inv.service_name ?? "—"}</span>
                 {inv.report?.culprit_commit_sha && <span className="font-mono text-[11.5px] text-accent">{shortSha(inv.report.culprit_commit_sha)}</span>}
               </div>
               <div className="mt-0.5 truncate text-[12.5px] text-muted">{inv.report?.summary ?? inv.report?.likely_cause ?? inv.error ?? "In progress…"}</div>

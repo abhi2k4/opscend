@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -22,9 +23,27 @@ MAX_COMPLETION_TOKENS = 1000
 class LLMError(Exception):
     """The model call failed. `retryable` marks failures worth one more attempt."""
 
-    def __init__(self, message: str, *, retryable: bool = False) -> None:
+    def __init__(
+        self, message: str, *, retryable: bool = False, unknown_tool: str | None = None
+    ) -> None:
         super().__init__(message)
         self.retryable = retryable
+        # Set when the provider rejected a call to a tool that was not offered.
+        self.unknown_tool = unknown_tool
+
+
+# Groq validates tool names server-side and rejects the whole completion when the model
+# invents one ("attempted to call tool 'search_incidents' which was not in request.tools").
+UNKNOWN_TOOL = re.compile(r"attempted to call tool '([^']{1,80})' which was not in request\.tools")
+MAX_TOOL_CORRECTIONS = 2
+
+
+def unknown_tool_note(name: str, tools: list[dict[str, Any]]) -> str:
+    """A correction for the model after it called a tool that does not exist."""
+    names = ", ".join(spec["function"]["name"] for spec in tools)
+    return (
+        f"There is no tool named {name!r}; that call was rejected. Use only these tools: {names}."
+    )
 
 
 @dataclass
@@ -135,9 +154,12 @@ def _parse(response: httpx.Response) -> LLMResponse:
         raise LLMError("the model API rejected the API key (check GROQ_API_KEY)")
     if response.status_code >= 400:
         # Groq answers 400 `tool_use_failed` when the model emits a malformed call.
+        detail = _error_message(response)
+        unknown = UNKNOWN_TOOL.search(detail) if response.status_code == 400 else None
         raise LLMError(
-            f"model API error (HTTP {response.status_code}): {_error_message(response)}",
+            f"model API error (HTTP {response.status_code}): {detail}",
             retryable=response.status_code in (400, 500, 502, 503),
+            unknown_tool=unknown.group(1) if unknown else None,
         )
     try:
         data = response.json()

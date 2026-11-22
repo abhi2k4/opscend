@@ -282,3 +282,61 @@ async def test_reconciler_replays_events_whose_job_was_lost(anon_client):
     assert await count(Deployment) == 0
     await poller.reconcile()
     assert await count(Deployment) == 1 and await count(Incident) == 1
+
+
+async def test_webhook_for_a_service_with_monitoring_off_stores_nothing(anon_client):
+    async with session_scope() as session:
+        service = await make_service(session)
+        service.monitored = False
+        await session.commit()
+    body, headers = vercel_delivery()
+
+    response = await anon_client.post("/api/webhooks/vercel", content=body, headers=headers)
+    assert response.status_code == 202
+    await drain_jobs()
+
+    assert await count(Deployment) == 0
+    assert await count(Incident) == 0
+
+
+@respx.mock
+async def test_sync_skips_services_with_monitoring_off_and_backfills_new_ones(client):
+    respx.get("https://api.vercel.com/v2/user").respond(json={"user": {"username": "acme-dana"}})
+    respx.get("https://api.vercel.com/v10/projects").respond(
+        json=load_fixture("vercel_projects.json")
+    )
+    polled: list[str] = []
+
+    def deployments(request: httpx.Request) -> httpx.Response:
+        polled.append(request.url.params["projectId"])
+        return httpx.Response(200, json={"deployments": []})
+
+    respx.get("https://api.vercel.com/v6/deployments").mock(side_effect=deployments)
+    created = (
+        await client.post("/api/integrations", json={"provider": "vercel", "token": SECRET_TOKEN})
+    ).json()
+    url = f"/api/integrations/{created['id']}/services"
+    services = {s["name"]: s for s in (await client.get(url)).json()}
+    assert set(services) == {"storefront-web", "docs"}
+    assert all(s["monitored"] for s in services.values())
+    deploys_before = await count(Deployment)
+
+    # Keep only "docs".
+    chosen = (await client.put(url, json={"service_ids": [services["docs"]["id"]]})).json()
+    assert {s["name"]: s["monitored"] for s in chosen} == {"docs": True, "storefront-web": False}
+    await drain_jobs()
+    polled.clear()
+    assert (await client.post(f"/api/integrations/{created['id']}/sync")).status_code == 200
+    assert polled == [services["docs"]["external_id"]]
+    # The service that is off is still listed for the integration, and gained nothing.
+    assert {s["name"] for s in (await client.get(url)).json()} == {"storefront-web", "docs"}
+    assert await count(Deployment) == deploys_before
+
+    # Turning it back on syncs it in the background.
+    polled.clear()
+    both = [s["id"] for s in services.values()]
+    assert all(s["monitored"] for s in (await client.put(url, json={"service_ids": both})).json())
+    await drain_jobs()
+    assert services["storefront-web"]["external_id"] in polled
+
+    assert (await client.put(url, json={"service_ids": ["nope"]})).status_code == 422

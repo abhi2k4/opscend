@@ -1,5 +1,7 @@
 """HTTP surface: auth, response shapes against the contract, demo mode, secrecy."""
 
+import json
+
 import pytest
 from sqlalchemy import select
 
@@ -493,6 +495,65 @@ async def test_health_url_can_be_set_turned_off_and_reset(client):
     assert (await client.patch(url, json={"health_url": None})).json()["health_url"] is None
     async with session_scope() as session:
         assert (await session.get(Service, service_id)).health_url is None
+
+
+async def test_a_service_can_be_pinned_or_muted_but_not_both(client):
+    async with session_scope() as session:
+        service = await make_service(session, health_url="https://storefront.acme.dev")
+        service_id = service.id
+    url = f"/api/services/{service_id}"
+
+    listed = (await client.get("/api/services")).json()[0]
+    assert (listed["pinned"], listed["muted"]) == (False, False)
+
+    pinned = (await client.patch(url, json={"pinned": True})).json()
+    assert (pinned["pinned"], pinned["muted"]) == (True, False)
+    # Changing the rank leaves the health URL alone.
+    assert pinned["health_url"] == "https://storefront.acme.dev"
+
+    muted = (await client.patch(url, json={"muted": True})).json()
+    assert (muted["pinned"], muted["muted"]) == (False, True)
+    again = (await client.patch(url, json={"pinned": True})).json()
+    assert (again["pinned"], again["muted"]) == (True, False)
+
+    cleared = (await client.patch(url, json={"pinned": False})).json()
+    assert (cleared["pinned"], cleared["muted"]) == (False, False)
+    assert (await client.patch(url, json={"pinned": "yes please"})).status_code == 422
+
+
+async def test_turning_monitoring_off_hides_a_service_everywhere(demo_client):
+    client = demo_client
+    services = (await client.get("/api/services")).json()
+    target = next(s for s in services if s["last_deploy_at"])
+    siblings = [
+        s["id"]
+        for s in services
+        if s["integration_id"] == target["integration_id"] and s["id"] != target["id"]
+    ]
+    url = f"/api/integrations/{target['integration_id']}/services"
+
+    def mentions(payload) -> bool:
+        return target["id"] in json.dumps(payload)
+
+    assert mentions((await client.get("/api/deployments?limit=500")).json())
+    assert mentions((await client.get("/api/timeline?limit=500")).json())
+
+    after = (await client.put(url, json={"service_ids": siblings})).json()
+    assert {s["id"]: s["monitored"] for s in after}[target["id"]] is False
+
+    overview = (await client.get("/api/overview")).json()
+    assert overview["stats"]["services"] == len(services) - 1
+    for path in ("/api/services", "/api/deployments?limit=500", "/api/timeline?limit=500"):
+        assert not mentions((await client.get(path)).json()), path
+    assert not mentions(overview)
+    assert not mentions((await client.get("/api/incidents")).json())
+    # It is still there to be turned back on.
+    everything = (await client.get("/api/services?scope=all")).json()
+    assert len(everything) == len(services)
+
+    await client.put(url, json={"service_ids": [*siblings, target["id"]]})
+    assert mentions((await client.get("/api/deployments?limit=500")).json())
+    assert len((await client.get("/api/services")).json()) == len(services)
 
 
 @pytest.mark.parametrize(

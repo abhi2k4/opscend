@@ -16,7 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.time import utcnow
-from app.investigator.llm import LLMClient, LLMError, build_llm
+from app.investigator.llm import (
+    MAX_TOOL_CORRECTIONS,
+    LLMClient,
+    LLMError,
+    build_llm,
+    unknown_tool_note,
+)
 from app.models import ChatMessage, ChatSession, Service
 
 from . import citations
@@ -88,7 +94,13 @@ class _Turn:
         message.model = llm.model
 
     async def _context(self) -> list[dict[str, Any]]:
-        services = list((await self.session.scalars(select(Service).order_by(Service.name))).all())
+        services = list(
+            (
+                await self.session.scalars(
+                    select(Service).where(Service.monitored.is_(True)).order_by(Service.name)
+                )
+            ).all()
+        )
         self.ledger.services.update(s.id for s in services)
         earlier = (
             await self.session.scalars(
@@ -129,6 +141,7 @@ class _Turn:
     async def execute(self) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
         messages = await self._context()
         retried = False
+        corrections = 0
         for turn in range(MAX_TURNS):
             forced = self._over_budget() or turn == MAX_TURNS - 1
             try:
@@ -136,6 +149,11 @@ class _Turn:
                     messages, CHAT_TOOL_SPECS, "none" if forced else "auto"
                 )
             except LLMError as exc:
+                if exc.unknown_tool and corrections < MAX_TOOL_CORRECTIONS:
+                    corrections += 1
+                    note = unknown_tool_note(exc.unknown_tool, CHAT_TOOL_SPECS)
+                    messages.append({"role": "user", "content": note})
+                    continue
                 if exc.retryable and not retried:
                     retried = True
                     continue

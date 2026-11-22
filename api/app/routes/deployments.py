@@ -12,6 +12,7 @@ from app.services.presenters import (
     find_commit,
     investigation_out,
     latest_investigation_id,
+    monitored_service_ids,
     service_out,
 )
 
@@ -27,7 +28,12 @@ async def list_deployments(
     status: schemas.DeployStatus | None = None,
     provider: str | None = None,
 ) -> list[schemas.Deployment]:
-    query = select(models.Deployment).order_by(models.Deployment.started_at.desc()).limit(limit)
+    query = (
+        select(models.Deployment)
+        .where(models.Deployment.service_id.in_(monitored_service_ids()))
+        .order_by(models.Deployment.started_at.desc())
+        .limit(limit)
+    )
     if status:
         query = query.where(models.Deployment.status == status)
     if provider:

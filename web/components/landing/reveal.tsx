@@ -63,34 +63,25 @@ export function Rule({ className }: { className?: string }) {
 }
 
 /**
- * Page section laid out like a spec sheet: a narrow margin column carrying the
- * section number, and a wide column carrying the content.
+ * A page section: a short label, a headline, one sentence, then the content.
+ * One column with generous space above and below, so each section reads on its own.
  */
-export function Section({ id, no, label, title, lead, children }: { id?: string; no: string; label: string; title: ReactNode[]; lead?: ReactNode; children: ReactNode }) {
+export function Section({ id, label, title, lead, children }: { id?: string; label: string; title: ReactNode[]; lead?: ReactNode; children: ReactNode }) {
   return (
     <section id={id} className="scroll-mt-14">
-      <Rule />
-      <div className="mx-auto grid max-w-[1360px] grid-cols-1 gap-x-10 px-5 sm:px-8 lg:grid-cols-12">
-        <div className="pt-6 lg:col-span-2 lg:pt-10">
-          <div className="label lg:sticky lg:top-20">
-            <span className="text-fg">§{no}</span>
-            <span className="mx-2 text-faint">/</span>
-            {label}
-          </div>
-        </div>
-        <div className="min-w-0 pb-20 pt-6 lg:col-span-10 lg:pb-28 lg:pt-10">
-          <div className="grid grid-cols-1 items-end gap-x-10 gap-y-6 lg:grid-cols-10">
-            <h2 className="display text-[clamp(44px,6.4vw,92px)] lg:col-span-7">
-              <Lines lines={title} />
-            </h2>
-            {lead && (
-              <Rise delay={0.15} className="lg:col-span-3">
-                <p className="max-w-md text-[15px] leading-relaxed text-muted">{lead}</p>
-              </Rise>
-            )}
-          </div>
-          <div className="mt-12 lg:mt-16">{children}</div>
-        </div>
+      <div className="mx-auto max-w-[1120px] px-6 py-24 sm:px-8 lg:py-36">
+        <Rise>
+          <div className="label">{label}</div>
+        </Rise>
+        <h2 className="display mt-5 text-[clamp(40px,5.6vw,76px)]">
+          <Lines lines={title} />
+        </h2>
+        {lead && (
+          <Rise delay={0.15}>
+            <p className="mt-6 max-w-xl text-[18px] leading-[1.6] text-fg/75">{lead}</p>
+          </Rise>
+        )}
+        <div className="mt-14 lg:mt-20">{children}</div>
       </div>
     </section>
   );

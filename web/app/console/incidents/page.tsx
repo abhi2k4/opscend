@@ -64,18 +64,18 @@ export default function IncidentsPage() {
               <span className={cn("grid size-8 shrink-0 place-items-center rounded-md border", open ? "border-err/40 bg-err/10 text-err" : "border-line bg-raised text-muted")}>
                 {i.trigger === "deploy_failed" ? <Rocket size={14} /> : <HeartPulse size={14} />}
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-[200px]">
                 <div className="flex items-center gap-2 text-[13.5px]">
                   <span className="truncate font-medium">{i.title}</span>
                   <Tag color={open ? "var(--err)" : "var(--muted)"}>{i.status}</Tag>
                 </div>
-                <div className="mt-0.5 flex items-center gap-2 font-mono text-[11px] text-muted">
-                  <ProviderIcon provider={i.provider} size={11} /> {i.service_name}
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-muted">
+                  <ProviderIcon provider={i.provider} size={11} className="shrink-0" /> {i.service_name}
                   <span className="text-faint">· {i.trigger.replace(/_/g, " ")} · opened {timeAgo(i.opened_at, now)}</span>
                   {i.resolved_at && <span className="text-faint">· resolved {timeAgo(i.resolved_at, now)}</span>}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:pl-12">
                 {i.deployment_id && (
                   <Link href={`/console/deployments/${i.deployment_id}`} className="font-mono text-[11px] text-muted hover:text-fg">
                     deploy →

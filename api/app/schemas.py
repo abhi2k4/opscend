@@ -123,6 +123,15 @@ class Service(Schema):
     health_history: list[HealthPoint]
     last_deploy_status: DeployStatus | None
     last_deploy_at: datetime | None
+    pinned: bool
+    muted: bool
+    monitored: bool
+
+
+class MonitoredServices(Schema):
+    """Body of PUT /integrations/{id}/services: the services to keep monitoring."""
+
+    service_ids: list[str]
 
 
 class Commit(Schema):
@@ -189,6 +198,13 @@ class ChangedFile(Schema):
     status: Literal["added", "modified", "removed", "renamed"]
     additions: int
     deletions: int
+    # The file on the source host at the deployed commit, at `line` when one is known.
+    url: str | None = None
+    # True when the failure points at this file: the investigation names it, or it
+    # appears in the deployment's error logs. `suspect_reason` says which.
+    suspect: bool = False
+    suspect_reason: str | None = None
+    line: int | None = None
 
 
 class DeploymentChanges(Schema):
@@ -377,7 +393,7 @@ class Investigation(Schema):
 
 
 class ChatCitation(Schema):
-    type: Literal["deploy", "log", "commit", "incident", "service"]
+    type: Literal["deploy", "log", "commit", "incident", "investigation", "service"]
     ref: str
     label: str
     detail: str | None = None

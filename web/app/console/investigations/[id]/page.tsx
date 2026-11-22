@@ -23,7 +23,7 @@ export default function InvestigationPage() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-14 rounded-xl" />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Skeleton className="h-96 rounded-xl" />
           <Skeleton className="h-96 rounded-xl" />
         </div>
@@ -60,7 +60,7 @@ export default function InvestigationPage() {
         </div>
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[1.05fr_1fr]">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         <Panel>
           <PanelHeader title="Trace" right={<span className="label-mono text-faint">click a span for input and output</span>} />
           <TraceView inv={inv} />

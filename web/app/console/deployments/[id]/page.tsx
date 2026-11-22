@@ -65,15 +65,15 @@ function DeployDetail() {
     <>
       <div className="mb-5 flex flex-wrap items-start gap-4">
         <ProviderTile provider={d.provider} size={40} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-[20px] font-medium tracking-tight">{d.service_name}</h1>
+        <div className="min-w-0 flex-1 basis-[220px]">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <h1 className="min-w-0 break-words text-[20px] font-medium tracking-tight">{d.service_name}</h1>
             <StatusBadge status={d.status} />
             {d.incident_id && <Tag color="var(--err)">incident</Tag>}
           </div>
           <p className="mt-1 truncate text-[13px] text-muted">{firstLine(d.commit_message) || "No commit message"}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {d.url && (
             <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-raised px-3 text-[13px] hover:border-[var(--line-strong)]">
               {providerName(d.provider)} <ExternalLink size={12} />
@@ -108,20 +108,20 @@ function DeployDetail() {
       </div>
 
       <Panel className="mt-4">
-        <div className="flex items-center gap-1 border-b border-line px-2" role="tablist">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-line px-2 [scrollbar-width:none]" role="tablist">
           {visible.map((t) => (
             <button
               key={t.id}
               role="tab"
               aria-selected={current?.id === t.id}
               onClick={() => setTab(t.id)}
-              className={cn("relative flex h-10 items-center gap-2 px-3 font-mono text-[11px] uppercase tracking-wider transition-colors", current?.id === t.id ? "text-fg" : "text-muted hover:text-fg")}
+              className={cn("relative flex h-10 shrink-0 items-center gap-2 whitespace-nowrap px-3 font-mono text-[11px] uppercase tracking-wider transition-colors", current?.id === t.id ? "text-fg" : "text-muted hover:text-fg")}
             >
               <t.icon size={13} /> {t.label}
               {current?.id === t.id && <motion.span layoutId="deploy-tab" className="absolute inset-x-2 bottom-0 h-px bg-accent" />}
             </button>
           ))}
-          <span className="ml-auto pr-2 font-mono text-[11px] text-faint">
+          <span className="ml-auto hidden shrink-0 pl-3 pr-2 font-mono text-[11px] text-faint md:block">
             <Mono value={d.id} display={`id ${d.id.length > 14 ? `${d.id.slice(0, 12)}…` : d.id}`} />
           </span>
         </div>

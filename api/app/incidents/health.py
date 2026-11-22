@@ -61,7 +61,11 @@ async def run_health_checks(client: httpx.AsyncClient | None = None) -> int:
                     select(Service, Integration.is_demo)
                     .join(Integration, Integration.id == Service.integration_id)
                     # NULL = no URL known, "" = checks turned off for this service.
-                    .where(Service.health_url.is_not(None), Service.health_url != "")
+                    .where(
+                        Service.health_url.is_not(None),
+                        Service.health_url != "",
+                        Service.monitored.is_(True),
+                    )
                 )
             ).all()
             for service, is_demo in rows:

@@ -36,6 +36,12 @@ class Service(Base):
     health_url: Mapped[str | None] = mapped_column(String(1024))
     # Provider-specific lookup data the adapter needs again later (e.g. Railway project id).
     meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # How the user ranks it on the overview: pinned first, muted last. Never both.
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    muted: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Off = the service is still listed under its integration, but nothing is collected
+    # for it (deploys, health checks, incidents) and it is hidden from the console.
+    monitored: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 

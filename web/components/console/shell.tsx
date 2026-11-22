@@ -148,12 +148,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             <Crumbs pathname={pathname} />
             <button
               onClick={() => setPaletteOpen(true)}
-              className="ml-auto flex h-8 w-full max-w-[280px] items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-[12.5px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-fg"
+              aria-label="Search or jump to a page"
+              className="ml-auto flex size-8 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-surface text-[12.5px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-fg sm:w-full sm:max-w-[200px] sm:shrink lg:max-w-[280px] sm:justify-start sm:px-2.5"
             >
               <Search size={13} />
-              <span className="flex-1 truncate text-left">Search or jump to…</span>
-              <Kbd>⌘</Kbd>
-              <Kbd>K</Kbd>
+              <span className="hidden flex-1 truncate text-left sm:block">Search or jump to…</span>
+              <Kbd className="max-sm:hidden">⌘</Kbd>
+              <Kbd className="max-sm:hidden">K</Kbd>
             </button>
             <NotificationBell />
             <a href={API_DOCS_URL} target="_blank" rel="noreferrer" className="hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] text-muted hover:bg-raised hover:text-fg sm:inline-flex">
@@ -175,15 +176,15 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 function Crumbs({ pathname }: { pathname: string }) {
   const parts = pathname.split("/").filter(Boolean).slice(1);
   return (
-    <div className="flex min-w-0 items-center gap-2 font-mono text-[12px]">
-      <Link href="/console" className="text-muted hover:text-fg">
+    <div className="flex min-w-0 flex-1 items-center gap-2 font-mono text-[12px]">
+      <Link href="/console" className="shrink-0 text-muted hover:text-fg">
         console
       </Link>
       {parts.map((p, i) => (
         <span key={i} className="flex min-w-0 items-center gap-2">
           <span className="text-faint">/</span>
           {i < parts.length - 1 ? (
-            <Link href={`/console/${parts.slice(0, i + 1).join("/")}`} className="text-muted hover:text-fg">
+            <Link href={`/console/${parts.slice(0, i + 1).join("/")}`} className="truncate text-muted hover:text-fg">
               {p}
             </Link>
           ) : (
@@ -417,11 +418,11 @@ function Palette({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
 export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
+      <div className="min-w-0">
         <h1 className="text-[20px] font-medium tracking-tight">{title}</h1>
         {description && <p className="mt-1 text-[13px] text-muted">{description}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

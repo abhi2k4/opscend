@@ -1,12 +1,21 @@
 """Build API schemas from ORM rows (the read side shared by routes and the investigator)."""
 
-from sqlalchemy import or_, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models, schemas
 from app.core.time import duration_ms
 
 HEALTH_HISTORY = 24
+
+
+def monitored_service_ids() -> Select[tuple[str]]:
+    """Subquery of the services the user has left monitoring on for.
+
+    Everything the console lists is narrowed with it, so a service that was turned
+    off disappears from every view while its history stays in the database.
+    """
+    return select(models.Service.id).where(models.Service.monitored.is_(True))
 
 
 async def service_out(session: AsyncSession, service: models.Service) -> schemas.Service:
@@ -38,6 +47,9 @@ async def service_out(session: AsyncSession, service: models.Service) -> schemas
         health_history=[schemas.HealthPoint.model_validate(c) for c in reversed(checks)],
         last_deploy_status=last_deploy.status if last_deploy else None,
         last_deploy_at=last_deploy.started_at if last_deploy else None,
+        pinned=bool(service.pinned),
+        muted=bool(service.muted),
+        monitored=bool(service.monitored),
     )
 
 

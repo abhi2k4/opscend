@@ -1,10 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ExternalLink, Plus, RefreshCw, ShieldCheck, Trash2, X, Zap } from "lucide-react";
+import { ExternalLink, ListChecks, Plus, RefreshCw, ShieldCheck, Trash2, X, Zap } from "lucide-react";
 import { useState } from "react";
 import { mutate } from "swr";
 import { useNow } from "@/components/console/deploys";
+import { MonitorPanel } from "@/components/console/monitor-panel";
 import { PageHeader } from "@/components/console/shell";
 import { useToast } from "@/components/console/toast";
 import { Button, CopyButton, Dot, Empty, Panel, PanelHeader, Skeleton, Spotlight, Tag } from "@/components/ui/primitives";
@@ -12,7 +13,7 @@ import { ProviderTile, providerName } from "@/components/ui/provider";
 import { api, ApiError, useApi } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { REPO_URL } from "@/lib/site";
-import type { Capability, Integration, ProviderManifest } from "@/lib/types";
+import type { Capability, Integration, ProviderManifest, Service } from "@/lib/types";
 
 const CAP_LABEL: Record<Capability, string> = {
   LIST_SERVICES: "services",
@@ -45,6 +46,14 @@ export default function IntegrationsPage() {
   const now = useNow();
   const [connecting, setConnecting] = useState<ProviderManifest | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState<Integration | null>(null);
+  // Every service, including the ones monitoring is off for, to count them per integration.
+  const services = useApi<Service[]>("/services?scope=all");
+  const counts = new Map<string, { on: number; total: number }>();
+  for (const s of services.data ?? []) {
+    const c = counts.get(s.integration_id) ?? { on: 0, total: 0 };
+    counts.set(s.integration_id, { on: c.on + (s.monitored ? 1 : 0), total: c.total + 1 });
+  }
 
   const act = async (i: Integration, action: "test" | "sync" | "delete") => {
     if (action === "delete" && !window.confirm(`Disconnect ${providerName(i.provider)}? Its stored token is deleted. Recorded deploys stay.`)) return;
@@ -58,7 +67,7 @@ export default function IntegrationsPage() {
         if (res.status === "error") toast.error(`${providerName(i.provider)}: ${action} failed`, res.status_detail ?? undefined);
         else toast.ok(action === "test" ? "Connection works" : "Sync complete", res.account_name ?? undefined);
       }
-      await Promise.all([integrations.mutate(), mutate("/overview")]);
+      await Promise.all([integrations.mutate(), services.mutate(), mutate("/overview")]);
     } catch (e) {
       toast.error(`Could not ${action} ${providerName(i.provider)}`, (e as ApiError).message);
     } finally {
@@ -82,24 +91,32 @@ export default function IntegrationsPage() {
           <div key={i.id} className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line-soft px-4 py-3.5 last:border-0">
             <ProviderTile provider={i.provider} size={34} />
             <div className="min-w-[180px] flex-1">
-              <div className="flex items-center gap-2 text-[13.5px]">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px]">
                 <span className="font-medium">{providerName(i.provider)}</span>
-                <span className="text-muted">{i.account_name}</span>
+                <span className="min-w-0 truncate text-muted">{i.account_name}</span>
                 {i.is_demo && <Tag color="var(--warn)">demo data</Tag>}
               </div>
-              <div className="mt-1 flex items-center gap-3 font-mono text-[11px] text-muted">
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11px] text-muted">
                 <span className="flex items-center gap-1.5" style={{ color: STATUS_COLOR[i.status] }}>
                   <Dot color="currentColor" className="scale-75" /> {i.status}
                 </span>
-                <span>token ••••{i.token_hint}</span>
-                <span className="text-faint">synced {timeAgo(i.last_synced_at, now)}</span>
+                <span className="whitespace-nowrap">token ••••{i.token_hint}</span>
+                <span className="whitespace-nowrap text-faint">synced {timeAgo(i.last_synced_at, now)}</span>
               </div>
               {i.status_detail && <div className={`mt-1 text-[12px] ${i.status === "error" ? "text-err" : "text-warn"}`}>{i.status_detail}</div>}
             </div>
             <div className="hidden lg:block">
               <Caps caps={i.capabilities} />
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {counts.has(i.id) && (
+                <Button size="sm" onClick={() => setChoosing(i)} title="Choose which services are monitored">
+                  <ListChecks size={12} /> Services
+                  <span className="font-mono text-[11px] text-muted">
+                    {counts.get(i.id)!.on}/{counts.get(i.id)!.total}
+                  </span>
+                </Button>
+              )}
               <Button size="sm" loading={busy === `${i.id}:test`} disabled={i.is_demo} title={i.is_demo ? "Demo integrations have no real token" : undefined} onClick={() => act(i, "test")}>
                 <Zap size={12} /> Test
               </Button>
@@ -115,7 +132,7 @@ export default function IntegrationsPage() {
       </Panel>
 
       <h2 className="label-mono mb-2 mt-7">Catalog · from the adapter registry</h2>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {!catalog.data && [0, 1, 2].map((i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
         {available.map((m) => (
           <Spotlight key={m.provider} className="panel flex flex-col p-4">
@@ -169,7 +186,25 @@ export default function IntegrationsPage() {
             onDone={async (i) => {
               setConnecting(null);
               toast.ok(`${providerName(i.provider)} connected`, i.account_name ?? undefined);
-              await Promise.all([integrations.mutate(), mutate("/overview")]);
+              const [, all] = await Promise.all([integrations.mutate(), services.mutate(), mutate("/overview")]);
+              // Straight to the choice when the account has more than one service.
+              if ((all ?? []).filter((s) => s.integration_id === i.id).length > 1) setChoosing(i);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {choosing && (
+          <MonitorPanel
+            integration={choosing}
+            now={now}
+            onClose={() => setChoosing(null)}
+            onSaved={async (saved) => {
+              setChoosing(null);
+              const on = saved.filter((s) => s.monitored).length;
+              toast.ok(`Monitoring ${on} of ${saved.length} services`, providerName(choosing.provider));
+              await Promise.all([services.mutate(), mutate("/overview")]);
             }}
           />
         )}
@@ -199,7 +234,7 @@ function ConnectDialog({ manifest: m, onClose, onDone }: { manifest: ProviderMan
   };
 
   return (
-    <motion.div className="fixed inset-0 z-[70] grid place-items-center bg-black/70 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <motion.div className="fixed inset-0 z-[70] grid grid-cols-1 place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <motion.form
         onSubmit={submit}
         role="dialog"

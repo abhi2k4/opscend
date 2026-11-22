@@ -1,6 +1,9 @@
 """What changed between a deployment and the last one of its service that went live."""
 
 import logging
+import re
+from pathlib import PurePosixPath
+from urllib.parse import quote
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +12,7 @@ from app import schemas
 from app.core.time import duration_ms
 from app.integrations.base import CommitSource, Comparison, ProviderError
 from app.integrations.connect import adapter_for
-from app.models import Commit, CommitDiff, Deployment, Integration
+from app.models import Commit, CommitDiff, Deployment, Integration, Investigation, LogLine
 from app.schemas import Capability
 from app.services.presenters import deployment_out
 
@@ -129,6 +132,87 @@ async def _from_history(
     return commits, sorted(merged.values(), key=lambda f: f.filename)
 
 
+MAX_ERROR_LINES = 300
+IN_REPORT = "named in the investigation"
+IN_LOGS = "appears in the error logs"
+
+
+def _mentions(text: str, path: str, unique_names: set[str]) -> tuple[bool, int | None]:
+    """Whether `text` points at the file, and the line number it gives, if any.
+
+    Logs rarely carry the repo path as is (`/app/dist/config/env.js` for
+    `src/config/env.ts`), so three forms count: the full path, the last folder plus
+    the file's stem, and the bare filename when no other changed file shares it.
+    A line number is only trusted next to the exact filename, extension included.
+    """
+    file = PurePosixPath(path)
+    forms = [path]
+    if file.parent.name and len(file.stem) >= 3:
+        forms.append(f"{file.parent.name}/{file.stem}")
+    if file.name in unique_names and "." in file.name and len(file.name) >= 5:
+        forms.append(file.name)
+    hit = next((form for form in forms if form in text), None)
+    if hit is None:
+        return False, None
+    line = None
+    if hit in (path, file.name):  # the stem form may be a compiled copy, with other line numbers
+        found = re.search(re.escape(hit) + r"""["')]?(?:,?\s*line\s+|:)(\d{1,6})""", text)
+        line = int(found.group(1)) if found else None
+    return True, line
+
+
+async def _mark_suspects(
+    session: AsyncSession,
+    deployment: Deployment,
+    files: list[schemas.ChangedFile],
+    base: str | None,
+) -> None:
+    """Link each file to the source host and flag the ones the failure points at."""
+    repo, head = deployment.service.repo, deployment.commit_sha
+    report_text, log_text = "", ""
+    if deployment.status == "failed" and files:
+        investigation = await session.scalar(
+            select(Investigation)
+            .where(
+                Investigation.deployment_id == deployment.id, Investigation.status == "completed"
+            )
+            .order_by(Investigation.created_at.desc())
+            .limit(1)
+        )
+        report = (investigation.report if investigation else None) or {}
+        if not report.get("inconclusive"):
+            parts = [report.get("likely_cause"), report.get("summary"), report.get("suggested_fix")]
+            parts += [item.get("quote") for item in report.get("evidence") or []]
+            report_text = "\n".join(part for part in parts if part)
+        errors = await session.scalars(
+            select(LogLine.message)
+            .where(LogLine.deployment_id == deployment.id, LogLine.level == "error")
+            .order_by(LogLine.seq.desc())
+            .limit(MAX_ERROR_LINES)
+        )
+        log_text = "\n".join(errors.all())
+
+    names = [PurePosixPath(file.filename).name for file in files]
+    unique = {name for name in names if names.count(name) == 1}
+    in_logs = {f.filename: _mentions(log_text, f.filename, unique) for f in files if log_text}
+    in_report = {
+        f.filename: _mentions(report_text, f.filename, unique) for f in files if report_text
+    }
+    # A stack trace passes through many files; the investigation has already picked among
+    # them. So when it names any changed file, only those are suspects.
+    named = {name for name, (hit, _) in in_report.items() if hit}
+    for file in files:
+        logged, log_line = in_logs.get(file.filename, (False, None))
+        if file.filename in named or (logged and not named):
+            file.suspect = True
+            file.suspect_reason = IN_REPORT if file.filename in named else IN_LOGS
+            file.line = log_line or in_report.get(file.filename, (False, None))[1]
+        sha = base if file.status == "removed" else head
+        if repo and sha:
+            anchor = f"#L{file.line}" if file.line and file.status != "removed" else ""
+            file.url = f"https://github.com/{repo}/blob/{sha}/{quote(file.filename)}{anchor}"
+
+
 async def get_changes(session: AsyncSession, deployment: Deployment) -> schemas.DeploymentChanges:
     baseline = await baseline_for(session, deployment)
     if baseline is None:
@@ -191,9 +275,11 @@ async def get_changes(session: AsyncSession, deployment: Deployment) -> schemas.
         ]
         result.files = comparison.files
         result.truncated = comparison.truncated
+        await _mark_suspects(session, deployment, result.files, base)
         return result
 
     result.commits, result.files = await _from_history(session, deployment, baseline)
+    await _mark_suspects(session, deployment, result.files, base)
     result.source = "history" if result.commits else "none"
     if not is_demo:
         result.note = why_not or (NO_SOURCE if repo else "This service is not linked to a repo.")

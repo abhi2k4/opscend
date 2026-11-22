@@ -86,6 +86,25 @@ export interface Service {
   health_history: { status_code: number | null; latency_ms: number | null; ok: boolean; checked_at: string }[];
   last_deploy_status: DeployStatus | null;
   last_deploy_at: string | null;
+  /** Shown first on the overview. */
+  pinned: boolean;
+  /** Shown last on the overview, dimmed. Alerts are unaffected. Never true with `pinned`. */
+  muted: boolean;
+  /** Off = not polled, no incidents, hidden from the console. Only listed under its integration. */
+  monitored: boolean;
+}
+
+/** Body of PUT /integrations/{id}/services: the services to keep monitoring; the rest are turned off. */
+export interface MonitoredServices {
+  service_ids: string[];
+}
+
+/** Body of PATCH /services/{id}. Only the fields that are sent are changed. */
+export interface ServiceUpdate {
+  /** A URL turns checks on, "" turns them off, null goes back to the provider's own URL. */
+  health_url?: string | null;
+  pinned?: boolean;
+  muted?: boolean;
 }
 
 export interface Commit {
@@ -153,6 +172,13 @@ export interface ChangedFile {
   status: "added" | "modified" | "removed" | "renamed";
   additions: number;
   deletions: number;
+  /** The file on the source host at the deployed commit, at `line` when one is known. */
+  url: string | null;
+  /** True when the failure points at this file (see `suspect_reason`). */
+  suspect: boolean;
+  /** "named in the investigation" or "appears in the error logs". */
+  suspect_reason: string | null;
+  line: number | null;
 }
 
 /** What separates a deployment from the last one of its service that went live. */
@@ -290,7 +316,7 @@ export interface InvestigationStats {
 
 // ───────────────────────────── ask opscend (chat)
 
-export type ChatCitationType = "deploy" | "log" | "commit" | "incident" | "service";
+export type ChatCitationType = "deploy" | "log" | "commit" | "incident" | "investigation" | "service";
 
 /** A verified inline citation. The answer text carries it as `[type:ref]`. */
 export interface ChatCitation {

@@ -51,7 +51,7 @@ export default function Docs() {
   return (
     <LandingFrame>
       <Nav />
-      <main className="mx-auto max-w-[1360px] px-5 sm:px-8">
+      <main className="mx-auto max-w-[1120px] px-6 sm:px-8">
         <header className="relative border-b border-line py-12 lg:py-16">
           <Sherlog size={190} className="absolute bottom-6 right-0 hidden lg:block" title="Sherlog, the Opscend mascot" />
           <div className="label mb-6">

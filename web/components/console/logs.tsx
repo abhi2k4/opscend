@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowUpRight, Search, WrapText } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Search, WrapText } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Empty, levelColor, Skeleton } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
 import { clock, cn, duration, firstLine, shortSha, timeAgo } from "@/lib/format";
 import { highlight } from "@/lib/highlight";
+import { FileTree } from "./file-tree";
 import type { CommitDiff, DeploymentChanges, LogKind, LogLevel, LogLine } from "@/lib/types";
 
 const LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
@@ -116,54 +117,82 @@ const langOf = (file: string) => (file.endsWith(".py") ? "python" : /\.(ts|tsx|j
 
 export function DiffView({ deploymentId }: { deploymentId: string }) {
   const { data, error } = useApi<CommitDiff>(`/deployments/${deploymentId}/diff`);
+  // Every file starts collapsed; only opened patches are rendered (and highlighted).
+  const [open, setOpen] = useState<Set<string>>(new Set());
   if (error) return <Empty title="No diff available">{error.status === 404 ? "Connect GitHub so Opscend can fetch the commit for this deploy." : error.message}</Empty>;
   if (!data) return <div className="p-4"><Skeleton className="h-40" /></div>;
 
+  const toggle = (name: string) =>
+    setOpen((cur) => {
+      const next = new Set(cur);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  const allOpen = data.files.length > 0 && open.size === data.files.length;
+
   return (
     <div className="space-y-3 p-3">
-      {data.files.map((f) => (
-        <div key={f.filename} className="overflow-hidden rounded-lg border border-line">
-          <div className="flex items-center gap-3 border-b border-line bg-raised/50 px-3 py-2 font-mono text-[11.5px]">
-            <span className="truncate text-fg">{f.filename}</span>
-            <span className="text-faint">{f.status}</span>
-            <span className="ml-auto text-ok">+{f.additions}</span>
-            <span className="text-err">−{f.deletions}</span>
-          </div>
-          {f.patch ? (
-            <div className="overflow-x-auto bg-bg/50 py-1 font-mono text-[12px] leading-[1.7]">
-              {f.patch.split("\n").map((line, i) => {
-                const kind = line.startsWith("@@") ? "hunk" : line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx";
-                return (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex w-max min-w-full px-3",
-                      kind === "add" && "bg-ok/[0.09]",
-                      kind === "del" && "bg-err/[0.09]",
-                      kind === "hunk" && "bg-info/[0.07] text-info",
-                    )}
-                  >
-                    <span className={cn("w-4 shrink-0 select-none", kind === "add" ? "text-ok" : kind === "del" ? "text-err" : "text-faint")}>{kind === "hunk" ? "" : line[0] === " " ? "" : line[0]}</span>
-                    {kind === "hunk" ? (
-                      <span className="whitespace-pre">{line}</span>
-                    ) : (
-                      <span className="whitespace-pre text-fg/85" dangerouslySetInnerHTML={{ __html: highlight(line.slice(1), langOf(f.filename)) || "&nbsp;" }} />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="px-3 py-4 text-[12.5px] text-muted">Binary file or patch too large to display.</div>
-          )}
+      {data.files.length > 1 && (
+        <div className="flex items-center justify-between px-1 font-mono text-[11px] text-faint">
+          <span>
+            {data.files.length} files changed
+          </span>
+          <button onClick={() => setOpen(allOpen ? new Set() : new Set(data.files.map((f) => f.filename)))} className="text-muted hover:text-fg">
+            {allOpen ? "Collapse all" : "Expand all"}
+          </button>
         </div>
-      ))}
+      )}
+      {data.files.map((f) => {
+        const isOpen = open.has(f.filename);
+        return (
+          <div key={f.filename} className="overflow-hidden rounded-lg border border-line">
+            <button
+              onClick={() => toggle(f.filename)}
+              aria-expanded={isOpen}
+              className={cn("flex w-full items-center gap-3 bg-raised/50 px-3 py-2 text-left font-mono text-[11.5px] transition-colors hover:bg-raised", isOpen && "border-b border-line")}
+            >
+              <ChevronRight size={12} className={cn("shrink-0 text-faint transition-transform", isOpen && "rotate-90")} />
+              <span className="min-w-0 truncate text-fg">{f.filename}</span>
+              <span className="shrink-0 text-faint">{f.status}</span>
+              <span className="ml-auto shrink-0 text-ok">+{f.additions}</span>
+              <span className="shrink-0 text-err">−{f.deletions}</span>
+            </button>
+            {isOpen &&
+              (f.patch ? (
+                <div className="overflow-x-auto bg-bg/50 py-1 font-mono text-[12px] leading-[1.7]">
+                  {f.patch.split("\n").map((line, i) => {
+                    const kind = line.startsWith("@@") ? "hunk" : line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx";
+                    return (
+                      <div
+                        key={i}
+                        className={cn(
+                          "flex w-max min-w-full px-3",
+                          kind === "add" && "bg-ok/[0.09]",
+                          kind === "del" && "bg-err/[0.09]",
+                          kind === "hunk" && "bg-info/[0.07] text-info",
+                        )}
+                      >
+                        <span className={cn("w-4 shrink-0 select-none", kind === "add" ? "text-ok" : kind === "del" ? "text-err" : "text-faint")}>{kind === "hunk" ? "" : line[0] === " " ? "" : line[0]}</span>
+                        {kind === "hunk" ? (
+                          <span className="whitespace-pre">{line}</span>
+                        ) : (
+                          <span className="whitespace-pre text-fg/85" dangerouslySetInnerHTML={{ __html: highlight(line.slice(1), langOf(f.filename)) || "&nbsp;" }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-3 py-4 text-[12.5px] text-muted">Binary file or patch too large to display.</div>
+              ))}
+          </div>
+        );
+      })}
       {data.files.length === 0 && <Empty title="This commit changed no files" />}
     </div>
   );
 }
-
-const FILE_MARK = { added: ["A", "text-ok"], modified: ["M", "text-muted"], removed: ["D", "text-err"], renamed: ["R", "text-info"] } as const;
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -244,16 +273,7 @@ export function ChangesView({ deploymentId }: { deploymentId: string }) {
               <span className="text-ok">+{added}</span> <span className="text-err">−{removed}</span>
             </span>
           </div>
-          <ul className="overflow-hidden rounded-lg border border-line font-mono text-[11.5px]">
-            {data.files.map((f) => (
-              <li key={f.filename} className="flex items-center gap-3 border-b border-line-soft px-3 py-1.5 last:border-0">
-                <span className={cn("w-3 shrink-0", FILE_MARK[f.status][1])} title={f.status}>{FILE_MARK[f.status][0]}</span>
-                <span className="min-w-0 flex-1 truncate text-fg/90">{f.filename}</span>
-                <span className="text-ok">+{f.additions}</span>
-                <span className="w-10 text-right text-err">−{f.deletions}</span>
-              </li>
-            ))}
-          </ul>
+          <FileTree files={data.files} />
         </>
       )}
 

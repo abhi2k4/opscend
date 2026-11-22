@@ -22,7 +22,7 @@ from app.models import Deployment, Incident, Investigation, InvestigationStep, S
 from app.notifications import service as notifications
 from app.schemas import InvestigationReport
 
-from .llm import LLMClient, LLMError, build_llm
+from .llm import MAX_TOOL_CORRECTIONS, LLMClient, LLMError, build_llm, unknown_tool_note
 from .prompts import SYSTEM_PROMPT, task_prompt
 from .report import REPORT_TOOL, REPORT_TOOL_NAME, ReportDraft, finalize_report
 from .tools import TOOL_SPECS, EvidenceLedger, InvestigatorTools
@@ -145,20 +145,25 @@ class _Run:
     async def execute(self) -> InvestigationReport:
         messages = await self._context()
         nudged = retried_llm = retried_report = False
+        corrections = 0
 
         for turn in range(MAX_TURNS):
             forced = self._must_report(turn, nudged)
             step, started = await self._start_step(
                 "llm", self.llm.model, {"turn": turn + 1, "forced_report": forced}
             )
+            offered = [REPORT_TOOL] if forced else [*TOOL_SPECS, REPORT_TOOL]
             try:
                 response = await self.llm.complete(
-                    messages,
-                    [REPORT_TOOL] if forced else [*TOOL_SPECS, REPORT_TOOL],
-                    FORCE_REPORT if forced else "auto",
+                    messages, offered, FORCE_REPORT if forced else "auto"
                 )
             except LLMError as exc:
                 await self._finish_step(step, started, ok=False, summary=str(exc))
+                if exc.unknown_tool and corrections < MAX_TOOL_CORRECTIONS:
+                    corrections += 1
+                    note = unknown_tool_note(exc.unknown_tool, offered)
+                    messages.append({"role": "user", "content": note})
+                    continue
                 if exc.retryable and not retried_llm:
                     retried_llm = True
                     continue
