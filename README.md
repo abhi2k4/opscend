@@ -1,5 +1,7 @@
 # Opscend
 
+[![CI](https://github.com/abhi2k4/opscend/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi2k4/opscend/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Know why the deploy broke.** Opscend is an open-source, self-hosted tool that puts every deploy (Vercel, Railway, Render, Fly.io, Netlify, Cloudflare Pages, AWS) and every GitHub commit on one timeline, opens an incident when something fails, and runs a read-only AI investigator that reads the logs and the diff and names the likely cause — citing its evidence.
 
 > Single user, self-hosted, bring your own LLM key. The investigator has no write tools.
@@ -35,8 +37,8 @@ Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a faile
 | Overview | `/console` | Service health, open incidents, latest deploys |
 | Ask Opscend | `/console/ask` | Chat with your deploy data: answers cite the deploys, log lines and commits they come from |
 | Timeline | `/console/timeline` | Deploys, commits and incidents from all providers on one rail |
-| Deploy detail | `/console/deployments/:id` | Build and runtime logs with level filters, commit diff, Investigate |
-| Investigation | `/console/investigations/:id` | Live trace of every model turn and tool call, next to the cited report |
+| Deploy detail | `/console/deployments/:id` | Build and runtime logs with level filters, commit diff, Investigate, and **What changed**: the commits, files and build time that separate this deploy from the last one that went live |
+| Investigation | `/console/investigations/:id` | Live trace of every model turn and tool call, next to the cited report. Mark each report right or wrong; the list page counts the verdicts |
 | Incidents | `/console/incidents` | Auto-opened on failed deploys and failed health checks |
 | Notifications | `/console/notifications` | Bell in the top bar, full history, email alert status and a test button |
 | Integrations | `/console/integrations` | Paste a token, test it, see the provider's capabilities |
@@ -49,8 +51,9 @@ Developer conveniences: `⌘K` command palette (type a question to send it to As
 
 - Runs on **Groq** through its OpenAI-compatible API. Set `GROQ_API_KEY`; change the model with `OPSCEND_AI_MODEL`, or point `OPSCEND_AI_BASE_URL` at any OpenAI-compatible endpoint.
 - Five read-only tools: `get_deployment`, `get_logs`, `list_recent_deploys`, `get_commit_diff`, `get_health_history`.
+- **Runs by itself.** A failed deploy is investigated as soon as its incident opens, so the alert already carries the cause. Turn it off with `OPSCEND_AUTO_INVESTIGATE=0`; `OPSCEND_AUTO_INVESTIGATE_DAILY_LIMIT` (default 20) caps how many run per day.
 - At most eight tool calls per run, with a token budget. Every step is stored as a span.
-- The report must cite log lines, commits or deploys it actually saw, or say it is inconclusive.
+- The report must cite log lines, commits or deploys it actually saw. A report with no verified evidence is marked inconclusive, and one that cites only a commit (never the failure itself) is capped at low confidence.
 - Log text is passed as untrusted data. Provider tokens never enter the model context.
 
 ## Ask Opscend
@@ -99,7 +102,7 @@ docs/  plan, provider guide
 
 | Provider | Connect with | Deploys | Logs | Webhooks |
 | --- | --- | --- | --- | --- |
-| Vercel | Access token | yes | build | yes |
+| Vercel | Access token | yes | build, runtime (what the log stream returns in a few seconds) | yes |
 | Railway | Account or workspace token | yes | build, runtime | yes |
 | Render | API key | yes | build, runtime (last 6 hours of the service) | polled |
 | Fly.io | Access token (`fly tokens create readonly`) | releases | runtime (the app's recent buffer) | polled |
@@ -119,9 +122,14 @@ A provider is one adapter file plus one registry line. See [docs/adding-a-provid
 ```bash
 make test      # pytest, no live API calls
 make lint
-make check     # everything CI runs
+make check     # API lint and tests
+make check-web # web type-check
 ```
 
 ## Status
 
-v0.1. Adapters are written against the providers' public APIs and tested with recorded-style fixtures. Vercel, Railway and GitHub have been run against real accounts; Render, Fly.io, Netlify, Cloudflare and AWS have not yet. Not in scope: organizations, RBAC, alerting, any write action.
+v0.1. Adapters are written against the providers' public APIs and tested with recorded-style fixtures. Vercel, Railway and GitHub have been run against real accounts; Render, Fly.io, Netlify, Cloudflare and AWS have not yet. Not in scope: organizations, RBAC, any write action.
+
+## License
+
+[MIT](LICENSE). Provider logos are trademarks of their owners.
