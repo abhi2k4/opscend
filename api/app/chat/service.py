@@ -12,16 +12,20 @@ from app.core.queue import get_queue
 from app.core.time import utcnow
 from app.models import ChatMessage, ChatSession
 
-NOT_CONFIGURED = (
-    "Ask Opscend needs an AI model. Set GROQ_API_KEY in .env "
-    "(free key at https://console.groq.com/keys) and restart the API."
-)
+NOT_CONFIGURED = "Ask Opscend needs an AI model. {hint}, then restart the API."
 MAX_QUESTION_CHARS = 4000
 MAX_TITLE_CHARS = 80
 # A queued reply no worker has started after this long was dropped (worker down, or
 # running an older version without the `chat_reply` job). A running one past the
 # worker's own job timeout was killed.
 PENDING_TIMEOUT = timedelta(minutes=2)
+
+
+def job_timeout() -> timedelta:
+    """How long one investigation or answer may run: a slow local model needs longer."""
+    return timedelta(seconds=max(300.0, 6 * get_settings().ai_timeout_seconds))
+
+
 RUNNING_TIMEOUT = timedelta(minutes=6)
 NOT_PICKED_UP = (
     "No worker picked this question up. Check that the worker is running and on the "
@@ -40,7 +44,7 @@ async def ask(
     """
     settings = get_settings()
     if not settings.ai_configured:
-        raise HTTPException(409, NOT_CONFIGURED)
+        raise HTTPException(409, NOT_CONFIGURED.format(hint=settings.ai_missing))
     question = question.strip()
     if not question:
         raise HTTPException(422, "Ask a question first.")
@@ -82,7 +86,7 @@ async def expire_stale_replies() -> int:
     async with session_scope() as session:
         for status, timeout, error in (
             ("pending", PENDING_TIMEOUT, NOT_PICKED_UP),
-            ("running", RUNNING_TIMEOUT, TIMED_OUT),
+            ("running", max(RUNNING_TIMEOUT, job_timeout() + timedelta(minutes=1)), TIMED_OUT),
         ):
             result = await session.execute(
                 update(ChatMessage)

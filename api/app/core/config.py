@@ -10,6 +10,17 @@ API_DIR = Path(__file__).resolve().parents[2]
 ROOT_DIR = API_DIR.parent
 
 
+# OPSCEND_AI_PROVIDER → (default base URL, default model). Any other name is an
+# OpenAI-compatible server at OPSCEND_AI_BASE_URL (vLLM, LocalAI, a gateway, ...).
+# Self-hosted servers have no default model: it must be one the operator has loaded.
+AI_PROVIDERS: dict[str, tuple[str, str]] = {
+    "groq": ("https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),
+    "ollama": ("http://localhost:11434/v1", ""),
+    "lmstudio": ("http://localhost:1234/v1", ""),
+    "llamacpp": ("http://localhost:8080/v1", ""),
+}
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(ROOT_DIR / ".env", API_DIR / ".env"),
@@ -45,10 +56,19 @@ class Settings(BaseSettings):
     # Without Redis the API process runs the periodic poll/health jobs itself; 0 turns that off.
     background_jobs: bool = Field(True, alias="OPSCEND_BACKGROUND_JOBS")
 
-    groq_api_key: str | None = Field(None, alias="GROQ_API_KEY")
+    # The model: Groq (hosted, needs GROQ_API_KEY) or a server you run yourself (Ollama,
+    # LM Studio, llama.cpp, vLLM, ...), all through the OpenAI-compatible chat API.
     ai_provider: str = Field("groq", alias="OPSCEND_AI_PROVIDER")
-    ai_model: str = Field("openai/gpt-oss-120b", alias="OPSCEND_AI_MODEL")
-    ai_base_url: str = Field("https://api.groq.com/openai/v1", alias="OPSCEND_AI_BASE_URL")
+    groq_api_key: str | None = Field(None, alias="GROQ_API_KEY")
+    # Bearer token for any other endpoint; most self-hosted servers need none.
+    ai_api_key: str | None = Field(None, alias="OPSCEND_AI_API_KEY")
+    # Empty = the provider's default (see AI_PROVIDERS).
+    ai_model: str = Field("", alias="OPSCEND_AI_MODEL")
+    ai_base_url: str = Field("", alias="OPSCEND_AI_BASE_URL")
+    # 0 = the default: 60s and 1000 tokens hosted, 300s and 4000 tokens self-hosted
+    # (local models are slower, and "thinking" ones spend output tokens on reasoning).
+    ai_timeout_seconds: float = Field(0, alias="OPSCEND_AI_TIMEOUT_SECONDS")
+    ai_max_output_tokens: int = Field(0, alias="OPSCEND_AI_MAX_OUTPUT_TOKENS")
     ai_max_tool_calls: int = Field(8, alias="OPSCEND_AI_MAX_TOOL_CALLS")
     ai_token_budget: int = Field(40_000, alias="OPSCEND_AI_TOKEN_BUDGET")
     # Investigate a failed deploy as soon as its incident opens, up to a daily cap.
@@ -95,6 +115,52 @@ class Settings(BaseSettings):
             self.demo = True
         return self
 
+    @model_validator(mode="after")
+    def _ai_defaults(self) -> "Settings":
+        self.ai_provider = self.ai_provider.strip().lower() or "groq"
+        base_url, model = AI_PROVIDERS.get(self.ai_provider, ("", ""))
+        self.ai_base_url = (self.ai_base_url.strip() or base_url).rstrip("/")
+        self.ai_model = self.ai_model.strip() or model
+        if self.ai_timeout_seconds <= 0:
+            self.ai_timeout_seconds = 300.0 if self.ai_self_hosted else 60.0
+        if self.ai_max_output_tokens <= 0:
+            self.ai_max_output_tokens = 4000 if self.ai_self_hosted else 1000
+        return self
+
+    @property
+    def ai_self_hosted(self) -> bool:
+        """True for anything but Groq: a model server the operator runs, key optional."""
+        return self.ai_provider != "groq"
+
+    @property
+    def ai_key(self) -> str | None:
+        own = (self.ai_api_key or "").strip()
+        return own or (self.groq_api_key or "").strip() or None
+
+    @property
+    def ai_missing(self) -> str | None:
+        """What stops the model from being used, as an instruction; None when it is ready."""
+        if self.ai_simulated:
+            return None
+        if not self.ai_self_hosted:
+            if self.ai_key:
+                return None
+            return (
+                "Set GROQ_API_KEY in .env (free key at https://console.groq.com/keys), or "
+                "point Opscend at a model you run yourself with OPSCEND_AI_PROVIDER=ollama"
+            )
+        if not self.ai_base_url:
+            return (
+                f"Set OPSCEND_AI_BASE_URL in .env to the OpenAI-compatible endpoint of your "
+                f"'{self.ai_provider}' model server (for example http://localhost:8000/v1)"
+            )
+        if not self.ai_model:
+            return (
+                "Set OPSCEND_AI_MODEL in .env to a tool-calling model your server has "
+                "loaded (for example qwen3:8b on Ollama)"
+            )
+        return None
+
     @property
     def ai_simulated(self) -> bool:
         """The public demo never calls a real model, even when a key is present."""
@@ -102,8 +168,8 @@ class Settings(BaseSettings):
 
     @property
     def ai_configured(self) -> bool:
-        """True when investigations and chat can run: a key is set, or they are simulated."""
-        return self.ai_simulated or bool(self.groq_api_key and self.groq_api_key.strip())
+        """True when investigations and chat can run: a model is set up, or simulated."""
+        return self.ai_missing is None
 
     @property
     def ai_model_name(self) -> str:

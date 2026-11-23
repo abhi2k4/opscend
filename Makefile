@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: help install dev-api dev-web worker migrate test lint format check check-web
+.PHONY: help install dev-api dev-web worker migrate test lint format check check-web check-ai
 
 help:
 	@echo "make install   install api (uv) and web (pnpm) dependencies"
@@ -11,6 +11,7 @@ help:
 	@echo "make test      run the API tests"
 	@echo "make lint      ruff check + format check"
 	@echo "make check     lint + test (run before calling a task done)"
+	@echo "make check-ai  ask the configured model to call a tool (use after changing OPSCEND_AI_*)"
 
 install:
 	cd api && $(UV) sync
@@ -41,3 +42,6 @@ check: lint test
 
 check-web:
 	cd web && pnpm typecheck
+
+check-ai:
+	cd api && $(UV) run python -m app.investigator.check

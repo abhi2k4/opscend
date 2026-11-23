@@ -87,7 +87,7 @@ export default function Docs() {
                 {[
                   ["Docker", "Docker Desktop, or Docker Engine with Compose"],
                   ["Git", "to clone the repository"],
-                  ["A Groq API key", "free, only needed for the AI investigator"],
+                  ["A Groq API key or a local model", "a free key, or Ollama / LM Studio / vLLM on your own hardware; only needed for the AI investigator"],
                 ].map(([k, v]) => (
                   <li key={k} className="grid grid-cols-[150px_1fr] gap-4 border-b border-line py-3">
                     <span className="text-fg">{k}</span>
@@ -140,8 +140,18 @@ export default function Docs() {
               </p>
               <CodeBlock label=".env" code={`GROQ_API_KEY=your-key\n# optional: any tool-calling model your key can use\nOPSCEND_AI_MODEL=openai/gpt-oss-120b`} />
               <CodeBlock code="docker compose up -d api worker" />
+              <p>On Groq&apos;s free tier a run takes 30 to 60 seconds.</p>
               <p>
-                Any OpenAI-compatible provider works through <code>OPSCEND_AI_BASE_URL</code>. On Groq's free tier a run takes 30 to 60 seconds.
+                <strong>Prefer to keep everything on your own hardware?</strong> Opscend talks to any OpenAI-compatible server, with no key and nothing leaving your network. With{" "}
+                <a href="https://ollama.com" target="_blank" rel="noreferrer">Ollama</a>:
+              </p>
+              <CodeBlock code={`ollama pull qwen3:8b`} />
+              <CodeBlock label=".env" code={`OPSCEND_AI_PROVIDER=ollama\nOPSCEND_AI_MODEL=qwen3:8b\n# with Docker, reach the host's Ollama through:\nOPSCEND_AI_BASE_URL=http://host.docker.internal:11434/v1`} />
+              <CodeBlock code="make check-ai" />
+              <p>
+                <code>make check-ai</code> asks the model to call a tool and use the result, which is what the investigator depends on, so pick a model that supports tool calling. Presets also exist for{" "}
+                <code>lmstudio</code> and <code>llamacpp</code>; for vLLM or anything else, set <code>OPSCEND_AI_BASE_URL</code> yourself. On Ollama, start the server with{" "}
+                <code>OLLAMA_CONTEXT_LENGTH=16384</code> or more: the default window is too small for build logs. Expect a few minutes per investigation on a laptop.
               </p>
             </Step>
 

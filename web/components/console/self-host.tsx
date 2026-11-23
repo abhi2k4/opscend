@@ -56,7 +56,7 @@ export function SelfHostDialog({ onClose, reason }: { onClose: () => void; reaso
         <ul className="mt-4 space-y-1.5 text-[12.5px] leading-relaxed text-muted">
           <li>Runs on your machine with Docker. No account, nothing leaves it.</li>
           <li>Starts with this same sample data, then you connect Vercel, Railway, GitHub and the rest with read-only tokens.</li>
-          <li>Add a free Groq key to <code className="font-mono text-fg">.env</code> and the investigator and chat use a real model.</li>
+          <li>Add a free Groq key to <code className="font-mono text-fg">.env</code>, or point it at a model you run yourself (Ollama, LM Studio, vLLM), and the investigator and chat use a real model.</li>
         </ul>
 
         <div className="mt-5 flex flex-wrap items-center justify-end gap-x-5 gap-y-2">

@@ -31,7 +31,8 @@ export interface SystemInfo {
   /** The open showcase: no login, sample data only, nothing real can be connected. */
   public_demo: boolean;
   /** `simulated`: answers come from the demo's script, not from a model. */
-  ai: { provider: string; model: string; configured: boolean; simulated: boolean };
+  /** `self_hosted`: the model runs on a server the operator controls (Ollama, vLLM, …). */
+  ai: { provider: string; model: string; configured: boolean; simulated: boolean; self_hosted: boolean };
   queue: "arq" | "inline";
   database: "postgresql" | "sqlite";
 }

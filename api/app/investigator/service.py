@@ -14,10 +14,7 @@ from app.models import Deployment, Incident, Investigation
 
 log = logging.getLogger(__name__)
 
-NOT_CONFIGURED = (
-    "The AI investigator is not configured. Set GROQ_API_KEY in .env "
-    "(free key at https://console.groq.com/keys) and restart the API."
-)
+NOT_CONFIGURED = "The AI investigator is not configured. {hint}, then restart the API."
 
 
 async def start_investigation(
@@ -34,7 +31,7 @@ async def start_investigation(
     """
     settings = get_settings()
     if not settings.ai_configured:
-        raise HTTPException(409, NOT_CONFIGURED)
+        raise HTTPException(409, NOT_CONFIGURED.format(hint=get_settings().ai_missing))
 
     target = (
         Investigation.deployment_id == deployment.id

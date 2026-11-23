@@ -4,14 +4,14 @@
 
 **Know why the deploy broke.** Opscend is an open-source, self-hosted tool that puts every deploy (Vercel, Railway, Render, Fly.io, Netlify, Cloudflare Pages, AWS) and every GitHub commit on one timeline, opens an incident when something fails, and runs a read-only AI investigator that reads the logs and the diff and names the likely cause — citing its evidence.
 
-> Single user, self-hosted, bring your own LLM key. The investigator has no write tools.
+> Single user, self-hosted. Bring your own LLM key, or run the model yourself. The investigator has no write tools.
 
 ## Quick start
 
 ### With Docker
 
 ```bash
-cp .env.example .env        # set GROQ_API_KEY and OPSCEND_SECRET_KEY
+cp .env.example .env        # set OPSCEND_SECRET_KEY, and GROQ_API_KEY or a self-hosted model
 docker compose up
 ```
 
@@ -61,12 +61,43 @@ Developer conveniences: `⌘K` command palette (type a question to send it to As
 
 ## The AI investigator
 
-- Runs on **Groq** through its OpenAI-compatible API. Set `GROQ_API_KEY`; change the model with `OPSCEND_AI_MODEL`, or point `OPSCEND_AI_BASE_URL` at any OpenAI-compatible endpoint.
+- Runs on **Groq** by default (set `GROQ_API_KEY`), or on **a model you host yourself**: see [Self-hosted models](#self-hosted-models). Both go through the OpenAI-compatible chat API.
 - Five read-only tools: `get_deployment`, `get_logs`, `list_recent_deploys`, `get_commit_diff`, `get_health_history`.
 - **Runs by itself.** A failed deploy is investigated as soon as its incident opens, so the alert already carries the cause. Turn it off with `OPSCEND_AUTO_INVESTIGATE=0`; `OPSCEND_AUTO_INVESTIGATE_DAILY_LIMIT` (default 20) caps how many run per day.
 - At most eight tool calls per run, with a token budget. Every step is stored as a span.
 - The report must cite log lines, commits or deploys it actually saw. A report with no verified evidence is marked inconclusive, and one that cites only a commit (never the failure itself) is capped at low confidence.
 - Log text is passed as untrusted data. Provider tokens never enter the model context.
+
+### Self-hosted models
+
+To keep logs and diffs on your own hardware, point Opscend at a local model server instead of Groq. No key is needed.
+
+```bash
+ollama pull qwen3:8b
+```
+
+```bash
+# .env
+OPSCEND_AI_PROVIDER=ollama
+OPSCEND_AI_MODEL=qwen3:8b
+```
+
+```bash
+make check-ai   # asks the model to call a tool and answer from the result
+```
+
+| `OPSCEND_AI_PROVIDER` | Default endpoint |
+| --- | --- |
+| `ollama` | `http://localhost:11434/v1` |
+| `lmstudio` | `http://localhost:1234/v1` |
+| `llamacpp` | `http://localhost:8080/v1` |
+| anything else (`vllm`, `localai`, …) | set `OPSCEND_AI_BASE_URL` |
+
+- **The model must support tool calling.** That is all the investigator and Ask Opscend do with it. `make check-ai` tells you whether yours does.
+- **Docker:** the API container cannot see the host's `localhost`. Use `OPSCEND_AI_BASE_URL=http://host.docker.internal:11434/v1`, or run the bundled server with `docker compose --profile ollama up -d ollama` and use `http://ollama:11434/v1`.
+- **Ollama's context window** defaults to a few thousand tokens, which cuts off build logs. Start it with `OLLAMA_CONTEXT_LENGTH=16384` or more (the bundled service does).
+- **Speed:** a self-hosted model gets 300 seconds per reply and 4000 output tokens by default (`OPSCEND_AI_TIMEOUT_SECONDS`, `OPSCEND_AI_MAX_OUTPUT_TOKENS`). Small models are slower and less reliable at citing evidence than the Groq default; reports with no verified evidence are still marked inconclusive.
+- If the endpoint wants a token, set `OPSCEND_AI_API_KEY`.
 
 ## Ask Opscend
 
