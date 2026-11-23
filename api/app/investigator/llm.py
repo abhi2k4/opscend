@@ -132,7 +132,7 @@ class OpenAICompatibleClient:
                 except httpx.HTTPError as exc:
                     raise LLMError(self._unreachable(type(exc).__name__), retryable=True) from exc
                 if response.status_code != 429:
-                    return _parse(response)
+                    return _parse(response, self._max_tokens)
                 wait = _retry_after(response)
                 if attempt == self._rate_limit_retries or wait > MAX_RATE_LIMIT_WAIT:
                     raise LLMError(f"model API rate limit reached: {_error_message(response)}")
@@ -186,7 +186,7 @@ def _error_message(response: httpx.Response) -> str:
         return f"HTTP {response.status_code}"
 
 
-def _parse(response: httpx.Response) -> LLMResponse:
+def _parse(response: httpx.Response, max_tokens: int = MAX_COMPLETION_TOKENS) -> LLMResponse:
     if response.status_code == 401:
         raise LLMError(
             "the model API rejected the API key (check GROQ_API_KEY, or OPSCEND_AI_API_KEY "
@@ -203,9 +203,18 @@ def _parse(response: httpx.Response) -> LLMResponse:
         )
     try:
         data = response.json()
-        message = data["choices"][0]["message"]
+        choice = data["choices"][0]
+        message = choice["message"]
     except (ValueError, KeyError, IndexError) as exc:
         raise LLMError("model API returned an unexpected response", retryable=True) from exc
+    if choice.get("finish_reason") == "length":
+        # A reply cut off at the output limit is not an answer: a tool call in it may hold
+        # half its JSON, which would pass below as empty arguments. The same request gets
+        # the same cut, so this is not retried; the message names the setting to raise.
+        raise LLMError(
+            f"the model reached the output limit of {max_tokens} tokens before it finished; "
+            "raise OPSCEND_AI_MAX_OUTPUT_TOKENS (reasoning models need more)"
+        )
 
     calls = []
     replay = []  # the calls as they go back into the conversation: ids set, arguments a string

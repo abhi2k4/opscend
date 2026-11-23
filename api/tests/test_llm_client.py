@@ -98,6 +98,18 @@ async def test_errors_are_classified():
         await client().complete([], [], "auto")
 
 
+@respx.mock
+async def test_a_reply_cut_off_at_the_output_limit_is_an_error():
+    """A truncated tool call must not reach the caller as a call with empty arguments."""
+    cut_call = {"name": "submit_report", "arguments": '{"inconclusive": false, "likely_ca'}
+    message = {"role": "assistant", "content": None, "tool_calls": [{"function": cut_call}]}
+    respx.post(URL).respond(json={"choices": [{"finish_reason": "length", "message": message}]})
+    with pytest.raises(LLMError, match="OPSCEND_AI_MAX_OUTPUT_TOKENS") as cut_off:
+        await client().complete([], [], "auto")
+    assert "1000 tokens" in str(cut_off.value)
+    assert not cut_off.value.retryable
+
+
 # --- self-hosted model servers (Ollama, LM Studio, llama.cpp, vLLM) -------------------
 
 LOCAL = "http://localhost:11434/v1/chat/completions"
