@@ -15,6 +15,8 @@ class ChatSession(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     title: Mapped[str] = mapped_column(String(255))
+    # Public demo only: the visitor it belongs to, so nobody reads another's questions.
+    owner: Mapped[str | None] = mapped_column(String(36), index=True)
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)

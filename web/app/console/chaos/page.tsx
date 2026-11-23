@@ -3,10 +3,11 @@
 import { motion } from "motion/react";
 import { Bomb, FlaskConical, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { mutate } from "swr";
 import { InvestigateButton } from "@/components/console/deploys";
 import { PageHeader } from "@/components/console/shell";
+import { BROKE_EVENT } from "@/components/console/tour";
 import { useToast } from "@/components/console/toast";
 import { Button, ButtonLink, Empty, Panel, Skeleton, Spotlight, Tag } from "@/components/ui/primitives";
 import { api, ApiError, useApi } from "@/lib/api";
@@ -24,13 +25,23 @@ export default function ChaosPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [broken, setBroken] = useState<Record<string, Broken>>({});
 
+  // The tour can break one too, so the cards follow the event, not the click.
+  useEffect(() => {
+    const onBroke = (e: Event) => {
+      const { scenario_id, ...res } = (e as CustomEvent<Broken & { scenario_id: string }>).detail;
+      setBroken((b) => ({ ...b, [scenario_id]: res }));
+    };
+    window.addEventListener(BROKE_EVENT, onBroke);
+    return () => window.removeEventListener(BROKE_EVENT, onBroke);
+  }, []);
+
   const refreshAll = () => mutate((key) => typeof key === "string" && !key.startsWith("/system") && !key.startsWith("/auth"));
 
   const breakIt = async (s: DemoScenario) => {
     setBusy(s.id);
     try {
       const res = await api<Broken>("/demo/break", { method: "POST", json: { scenario_id: s.id } });
-      setBroken((b) => ({ ...b, [s.id]: res }));
+      window.dispatchEvent(new CustomEvent(BROKE_EVENT, { detail: { ...res, scenario_id: s.id } }));
       toast.ok(`${s.title}: deploy failed`, "A bad commit and a failed deploy went through the ingest pipeline.");
       refreshAll();
     } catch (e) {
@@ -87,6 +98,12 @@ export default function ChaosPage() {
         </div>
       )}
 
+      {system.data?.ai.simulated && (
+        <div className="mb-4 rounded-xl border border-line bg-surface px-4 py-3 text-[13px] leading-relaxed text-muted">
+          <span className="font-medium text-fg">The investigator here is simulated.</span> It runs the real read-only tools on each failure and cites real log lines, but its conclusions are scripted, not written by a model.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {!scenarios.data && !scenarios.error && [0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-44 rounded-xl" />)}
         {scenarios.error && <Panel className="sm:col-span-2 lg:col-span-3"><Empty title="Could not load scenarios">{scenarios.error.message}</Empty></Panel>}
@@ -94,7 +111,7 @@ export default function ChaosPage() {
           const b = broken[s.id];
           return (
             <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <Spotlight className="panel flex h-full flex-col p-4">
+              <Spotlight data-tour={b ? "broken" : i === 0 || Object.keys(broken).length > 0 ? "break" : undefined} className="panel flex h-full flex-col p-4">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] text-faint">{String(i + 1).padStart(2, "0")}</span>
                   {b ? <Tag color="var(--err)">broken</Tag> : <Tag>armed</Tag>}

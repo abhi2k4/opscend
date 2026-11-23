@@ -108,7 +108,7 @@ function DeployDetail() {
       </div>
 
       <Panel className="mt-4">
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-line px-2 [scrollbar-width:none]" role="tablist">
+        <div data-tour="tabs" className="flex items-center gap-1 overflow-x-auto border-b border-line px-2 [scrollbar-width:none]" role="tablist">
           {visible.map((t) => (
             <button
               key={t.id}

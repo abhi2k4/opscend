@@ -27,7 +27,19 @@ make dev-api                # FastAPI on :8000  (needs uv)
 make dev-web                # Next.js on :3000  (needs pnpm)
 ```
 
-Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a failed Railway deploy so every screen has data before you connect anything.
+Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a failed Railway deploy so every screen has data before you connect anything. The **Tour** button in the console walks through it (it needs `GROQ_API_KEY`, or `OPSCEND_AI_SIMULATED=1` to script the model's part).
+
+## The public demo
+
+The hosted demo is this same app with `OPSCEND_PUBLIC_DEMO=1`. It is a showcase, not a place to connect anything:
+
+- **No login.** Every visitor is a guest. Each browser gets its own chat history; everything else is shared sample data.
+- **Nothing real is reachable.** Connecting, testing, syncing and deleting integrations, inbound webhooks, health-URL edits and test emails all answer 403 with a pointer to the quick start. No provider is ever called.
+- **The model is simulated.** Investigations and Ask Opscend run the real read-only tools and the real evidence check, but the steps and conclusions come from a script (`api/app/demo/simulated.py`) that knows the scripted failures and a fixed set of questions. It uses no key, and the UI labels every run as simulated.
+- **It cleans up after itself.** Actions are paced per visitor, and the sample data is rebuilt after `OPSCEND_PUBLIC_DEMO_REFRESH_MINUTES` (default 120) once nobody has done anything for ten minutes.
+- **A guided tour** starts on the first visit: break a deploy, see the incident open, read the report, look at what changed, ask a question.
+
+To host one: set `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_SECRET_KEY` and `OPSCEND_COOKIE_SECURE=1` on the API, and build the web app with `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_LANDING_ONLY=0` and `OPSCEND_API_URL` pointing at the API. To try Opscend on your own deploys, with a real model, use the quick start above instead.
 
 ## What is in the box
 

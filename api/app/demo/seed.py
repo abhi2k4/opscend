@@ -9,15 +9,17 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.crypto import encrypt, token_hint
+from app.core.db import session_scope
 from app.core.time import utcnow
 from app.integrations.base import LogLineIn
 from app.integrations.registry import get_adapter_class
 from app.models import (
+    ChatSession,
     Commit,
     CommitDiff,
     Deployment,
@@ -27,6 +29,7 @@ from app.models import (
     Investigation,
     InvestigationStep,
     LogLine,
+    Notification,
     RawEvent,
     Service,
 )
@@ -42,6 +45,9 @@ from .scenarios import (
 )
 
 REPO = "acme/storefront"
+# The public demo is only rebuilt after this long without a visitor doing anything.
+QUIET_BEFORE_REFRESH = timedelta(minutes=10)
+MAX_EVENTS_BEFORE_REFRESH = 4000
 ACCOUNTS = {"vercel": "acme", "railway": "acme", "github": "acme-bot"}
 
 
@@ -169,7 +175,50 @@ async def wipe_demo(session: AsyncSession) -> None:
     await session.execute(delete(Integration).where(Integration.is_demo.is_(True)))
     for model in (Commit, CommitDiff, RawEvent):
         await session.execute(delete(model).where(model.is_demo.is_(True)))
+    if get_settings().public_demo:
+        # Everything there is sample data or a visitor's leftovers: start clean.
+        for model in (ChatSession, Notification, Investigation):
+            await session.execute(delete(model))
     await session.commit()
+
+
+async def rebuild_demo(session: AsyncSession) -> None:
+    await wipe_demo(session)
+    await seed_demo(session)
+
+
+async def refresh_public_demo() -> bool:
+    """Job: rebuild the public demo's sample data once it has gone quiet.
+
+    The sample deploys are dated relative to when they were seeded, so they go stale,
+    and visitors leave broken deploys and muted services behind. A rebuild waits for a
+    quiet spell so nobody loses the incident they are looking at.
+    """
+    settings = get_settings()
+    if not settings.public_demo or settings.public_demo_refresh_minutes <= 0:
+        return False
+    now = utcnow()
+    async with session_scope() as session:
+        seeded = await session.scalar(
+            select(func.max(Integration.last_synced_at)).where(Integration.is_demo.is_(True))
+        )
+        if seeded is None:
+            await seed_demo(session)
+            return True
+        if now - seeded < timedelta(minutes=settings.public_demo_refresh_minutes):
+            return False
+        latest = [
+            await session.scalar(select(func.max(column)))
+            for column in (RawEvent.received_at, Investigation.created_at, ChatSession.updated_at)
+        ]
+        busy = any(at and now - at < QUIET_BEFORE_REFRESH for at in latest)
+        events = await session.scalar(select(func.count(RawEvent.id))) or 0
+        # Never-ending traffic must not keep stale or bloated data alive for good.
+        overdue = now - seeded > 6 * timedelta(minutes=settings.public_demo_refresh_minutes)
+        if busy and not overdue and events < MAX_EVENTS_BEFORE_REFRESH:
+            return False
+        await rebuild_demo(session)
+        return True
 
 
 async def seed_demo(session: AsyncSession) -> None:
@@ -350,7 +399,7 @@ async def _seed_investigation(
     frame = line("config/env.js:21:28")
     health = line("Healthcheck failed!")
     errors = sum(1 for row in runtime if row.level == "error")
-    model = get_settings().ai_model
+    model = get_settings().ai_model_name
     sha = failed.commit_sha
     report = {
         "inconclusive": False,

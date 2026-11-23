@@ -7,6 +7,7 @@ import {
   Blocks,
   BookOpen,
   FlaskConical,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -32,6 +33,8 @@ import { cn, firstLine, shortSha } from "@/lib/format";
 import { API_DOCS_URL } from "@/lib/site";
 import type { Deployment, Incident, SystemInfo, User } from "@/lib/types";
 import { NotificationBell } from "./notifications";
+import { SelfHostDialog } from "./self-host";
+import { TourProvider, useTour } from "./tour";
 import { ToastProvider } from "./toast";
 
 interface NavItem {
@@ -70,6 +73,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const me = useApi<User>("/auth/me", { revalidateOnFocus: false });
+  const system = useApi<SystemInfo>("/system", { revalidateOnFocus: false });
+  const publicDemo = !!system.data?.public_demo;
+  // The tour needs the demo's scripted failures and something to investigate them.
+  const canTour = !!system.data?.demo_mode && !!system.data.ai.configured;
+  const [selfHost, setSelfHost] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
 
@@ -118,6 +126,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
   return (
     <ToastProvider>
+      <TourProvider autoStart={publicDemo}>
       <div className="flex h-dvh overflow-hidden">
         <aside className="hidden w-[232px] shrink-0 border-r border-line bg-surface md:block">
           <Sidebar user={me.data} />
@@ -156,11 +165,23 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               <Kbd className="max-sm:hidden">⌘</Kbd>
               <Kbd className="max-sm:hidden">K</Kbd>
             </button>
+            {canTour && <TourButton />}
             <NotificationBell />
             <a href={API_DOCS_URL} target="_blank" rel="noreferrer" className="hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] text-muted hover:bg-raised hover:text-fg sm:inline-flex">
               <BookOpen size={13} /> API
             </a>
           </header>
+          {publicDemo && (
+            <div className="flex shrink-0 items-center gap-x-3 gap-y-1 border-b border-line bg-warn/[0.05] px-4 py-1.5 text-[12px] text-muted">
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-mono uppercase tracking-wider text-warn">Live demo</span>
+                <span className="max-sm:hidden"> · sample data, simulated AI, nothing connected to real providers</span>
+              </span>
+              <button onClick={() => setSelfHost(true)} className="shrink-0 text-fg underline decoration-line underline-offset-4 hover:decoration-fg">
+                Run it yourself
+              </button>
+            </div>
+          )}
           <main className="min-h-0 flex-1 overflow-y-auto">
             <motion.div key={pathname} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="mx-auto max-w-[1320px] p-4 sm:p-6">
               {children}
@@ -169,7 +190,18 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </div>
       </div>
       <Palette open={paletteOpen} setOpen={setPaletteOpen} />
+      <AnimatePresence>{selfHost && <SelfHostDialog onClose={() => setSelfHost(false)} />}</AnimatePresence>
+      </TourProvider>
     </ToastProvider>
+  );
+}
+
+function TourButton() {
+  const { start, active } = useTour();
+  return (
+    <button onClick={start} title="Guided tour of the demo" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-line px-2.5 text-[12.5px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-fg">
+      <GraduationCap size={13} /> <span className="max-sm:hidden">{active ? "Restart tour" : "Tour"}</span>
+    </button>
   );
 }
 
@@ -254,16 +286,16 @@ function Sidebar({ user }: { user: User }) {
           <div className="flex items-center justify-between">
             <span className="uppercase tracking-wider text-faint">investigator</span>
             {system.data ? (
-              <span className="flex items-center gap-1.5" style={{ color: system.data.ai.configured ? "var(--ok)" : "var(--warn)" }}>
+              <span className="flex items-center gap-1.5" style={{ color: system.data.ai.configured && !system.data.ai.simulated ? "var(--ok)" : "var(--warn)" }}>
                 <Dot color="currentColor" className="scale-75" />
-                {system.data.ai.configured ? "ready" : "no key"}
+                {system.data.ai.simulated ? "simulated" : system.data.ai.configured ? "ready" : "no key"}
               </span>
             ) : (
               <span>…</span>
             )}
           </div>
           <div className="truncate" title={system.data?.ai.model}>
-            {system.data ? `${system.data.ai.provider} · ${system.data.ai.model}` : "—"}
+            {system.data ? (system.data.ai.simulated ? "scripted, no model" : `${system.data.ai.provider} · ${system.data.ai.model}`) : "—"}
           </div>
           <div className="flex justify-between text-faint">
             <span>queue {system.data?.queue ?? "—"}</span>
@@ -274,7 +306,7 @@ function Sidebar({ user }: { user: User }) {
         <div className="flex items-center gap-2 px-1">
           <span className="grid size-6 shrink-0 place-items-center rounded-md bg-raised font-mono text-[10px] uppercase text-muted">{user.email[0]}</span>
           <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{user.email}</span>
-          <button
+          {!system.data?.public_demo && <button
             title="Sign out"
             aria-label="Sign out"
             className="grid size-6 place-items-center rounded-md text-faint hover:bg-raised hover:text-fg"
@@ -285,7 +317,7 @@ function Sidebar({ user }: { user: User }) {
             }}
           >
             <LogOut size={13} />
-          </button>
+          </button>}
         </div>
       </div>
     </div>

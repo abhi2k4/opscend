@@ -39,11 +39,15 @@ class AIInfo(Schema):
     provider: str
     model: str
     configured: bool
+    # True when answers come from the demo's script, not from a model.
+    simulated: bool = False
 
 
 class SystemInfo(Schema):
     version: str
     demo_mode: bool
+    # The open showcase: no login, sample data only, nothing real can be connected.
+    public_demo: bool = False
     ai: AIInfo
     queue: Literal["arq", "inline"]
     database: Literal["postgresql", "sqlite"]

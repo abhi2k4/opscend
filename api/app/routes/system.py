@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app import __version__, models, schemas
 from app.core.config import get_settings
+from app.core.public_demo import forbid_in_public_demo
 from app.core.security import (
     SESSION_COOKIE,
     create_session_token,
@@ -28,10 +29,12 @@ async def system() -> schemas.SystemInfo:
     return schemas.SystemInfo(
         version=__version__,
         demo_mode=settings.demo,
+        public_demo=settings.public_demo,
         ai=schemas.AIInfo(
-            provider=settings.ai_provider,
-            model=settings.ai_model,
+            provider="demo" if settings.ai_simulated else settings.ai_provider,
+            model=settings.ai_model_name,
             configured=settings.ai_configured,
+            simulated=settings.ai_simulated,
         ),
         queue=settings.queue_kind,
         database=settings.database_kind,
@@ -42,6 +45,7 @@ async def system() -> schemas.SystemInfo:
 async def login(
     body: schemas.LoginRequest, response: Response, session: SessionDep
 ) -> schemas.User:
+    forbid_in_public_demo()  # nobody signs in there; everyone is already a guest
     user = await session.scalar(
         select(models.User).where(models.User.email == body.email.strip().lower())
     )

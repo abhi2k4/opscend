@@ -43,7 +43,9 @@ async def test_public_endpoints(anon_client):
         "provider": "groq",
         "model": "test-model",
         "configured": False,
+        "simulated": False,
     }
+    assert system.public_demo is False
     assert (await anon_client.get("/api/docs")).status_code == 200
     assert "/api/timeline" in (await anon_client.get("/api/openapi.json")).json()["paths"]
 

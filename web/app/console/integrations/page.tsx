@@ -6,6 +6,7 @@ import { useState } from "react";
 import { mutate } from "swr";
 import { useNow } from "@/components/console/deploys";
 import { MonitorPanel } from "@/components/console/monitor-panel";
+import { SelfHostDialog } from "@/components/console/self-host";
 import { PageHeader } from "@/components/console/shell";
 import { useToast } from "@/components/console/toast";
 import { Button, CopyButton, Dot, Empty, Panel, PanelHeader, Skeleton, Spotlight, Tag } from "@/components/ui/primitives";
@@ -13,7 +14,7 @@ import { ProviderTile, providerName } from "@/components/ui/provider";
 import { api, ApiError, useApi } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { REPO_URL } from "@/lib/site";
-import type { Capability, Integration, ProviderManifest, Service } from "@/lib/types";
+import type { Capability, Integration, ProviderManifest, Service, SystemInfo } from "@/lib/types";
 
 const CAP_LABEL: Record<Capability, string> = {
   LIST_SERVICES: "services",
@@ -47,6 +48,9 @@ export default function IntegrationsPage() {
   const [connecting, setConnecting] = useState<ProviderManifest | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<Integration | null>(null);
+  const system = useApi<SystemInfo>("/system", { revalidateOnFocus: false });
+  const publicDemo = !!system.data?.public_demo;
+  const [selfHost, setSelfHost] = useState<string | null>(null);
   // Every service, including the ones monitoring is off for, to count them per integration.
   const services = useApi<Service[]>("/services?scope=all");
   const counts = new Map<string, { on: number; total: number }>();
@@ -81,6 +85,17 @@ export default function IntegrationsPage() {
   return (
     <>
       <PageHeader title="Integrations" description="Connect a provider by pasting a token. Tokens are encrypted at rest and never returned by the API." />
+
+      {publicDemo && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-[13px] leading-relaxed text-muted">
+          <span className="min-w-0 flex-1 basis-[260px]">
+            <span className="font-medium text-fg">Connecting is turned off in the public demo.</span> These three accounts are sample data. You can still choose which of their services are monitored. To connect your own, run Opscend on your machine.
+          </span>
+          <Button variant="primary" onClick={() => setSelfHost("Run Opscend on your own machine to connect your providers. It takes three commands.")}>
+            Run it yourself
+          </Button>
+        </div>
+      )}
 
       <Panel>
         <PanelHeader title="Connected" right={<span className="label-mono flex items-center gap-1.5 text-faint"><ShieldCheck size={12} /> Fernet-encrypted</span>} />
@@ -123,7 +138,7 @@ export default function IntegrationsPage() {
               <Button size="sm" loading={busy === `${i.id}:sync`} disabled={i.is_demo} onClick={() => act(i, "sync")}>
                 <RefreshCw size={12} /> Sync
               </Button>
-              <Button size="sm" variant="ghost" loading={busy === `${i.id}:delete`} onClick={() => act(i, "delete")} aria-label="Disconnect">
+              <Button size="sm" variant="ghost" loading={busy === `${i.id}:delete`} disabled={publicDemo} title={publicDemo ? "Turned off in the public demo" : undefined} onClick={() => act(i, "delete")} aria-label="Disconnect">
                 <Trash2 size={13} />
               </Button>
             </div>
@@ -148,7 +163,7 @@ export default function IntegrationsPage() {
             <div className="mt-3">
               <Caps caps={m.capabilities} />
             </div>
-            <Button className="mt-4" variant="primary" onClick={() => setConnecting(m)}>
+            <Button className="mt-4" variant="primary" onClick={() => (publicDemo ? setSelfHost(`Connecting ${m.name} is turned off in the public demo. On your own machine you paste a read-only token and it starts syncing.`) : setConnecting(m))}>
               <Plus size={13} /> Connect {m.name}
             </Button>
           </Spotlight>
@@ -193,6 +208,8 @@ export default function IntegrationsPage() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>{selfHost && <SelfHostDialog reason={selfHost} onClose={() => setSelfHost(null)} />}</AnimatePresence>
 
       <AnimatePresence>
         {choosing && (

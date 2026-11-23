@@ -127,8 +127,12 @@ class OpenAICompatibleClient:
                 await client.aclose()
 
 
-def build_llm() -> OpenAICompatibleClient:
+def build_llm() -> LLMClient:
     settings = get_settings()
+    if settings.ai_simulated:
+        from app.demo.simulated import SimulatedLLM  # imported late: it imports this module
+
+        return SimulatedLLM()
     if not settings.ai_configured:
         raise LLMError("GROQ_API_KEY is not set")
     return OpenAICompatibleClient(settings.ai_base_url, settings.groq_api_key, settings.ai_model)

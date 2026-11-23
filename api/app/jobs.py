@@ -8,6 +8,7 @@ from typing import Any
 from app.chat.orchestrator import run_chat_reply
 from app.chat.service import expire_stale_replies
 from app.core.config import get_settings
+from app.demo.seed import refresh_public_demo
 from app.incidents.health import run_health_checks
 from app.ingest import normalizer, poller
 from app.investigator.orchestrator import run_investigation
@@ -49,6 +50,10 @@ async def health_checks(ctx: dict[str, Any]) -> None:
     await run_health_checks()
 
 
+async def refresh_demo(ctx: dict[str, Any]) -> None:
+    await refresh_public_demo()
+
+
 async def deliver_notifications(ctx: dict[str, Any]) -> None:
     await deliver_pending()
 
@@ -65,6 +70,7 @@ JOBS = {
         deliver_notifications,
         expire_chat_replies,
         prune,
+        refresh_demo,
     )
 }
 
@@ -72,7 +78,9 @@ JOBS = {
 def periodic_jobs() -> dict[str, int]:
     """Job name → interval in seconds, for the inline queue's timers."""
     settings = get_settings()
+    jobs = {"refresh_demo": 300} if settings.public_demo else {}
     return {
+        **jobs,
         "reconcile": max(30, settings.poll_interval_seconds),
         "health_checks": max(30, settings.health_interval_seconds),
         "deliver_notifications": 15,

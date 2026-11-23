@@ -12,7 +12,7 @@ import { Button, ButtonLink, Empty, HealthBadge, Panel, PanelHeader, Skeleton, S
 import { ProviderTile } from "@/components/ui/provider";
 import { api, ApiError, useApi } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/format";
-import type { Overview, Service, ServiceUpdate } from "@/lib/types";
+import type { Overview, Service, ServiceUpdate, SystemInfo } from "@/lib/types";
 
 function Count({ value }: { value: number }) {
   const mv = useMotionValue(0);
@@ -78,6 +78,8 @@ function RankButton({ on, label, onClick, children }: { on: boolean; label: stri
 function ServiceCard({ s, now }: { s: Service; now: number }) {
   const [editing, setEditing] = useState(false);
   const rank = useRank(s);
+  // Health URLs make the server call an address, so the public demo does not take them.
+  const locked = !!useApi<SystemInfo>("/system", { revalidateOnFocus: false }).data?.public_demo;
   const checks = s.health_history.slice(-SLOTS);
   const monitored = !!s.health_url;
   const max = Math.max(1, ...checks.map((h) => h.latency_ms ?? 0));
@@ -137,7 +139,7 @@ function ServiceCard({ s, now }: { s: Service; now: number }) {
             <a href={s.health_url!} target="_blank" rel="noreferrer" className="truncate text-faint hover:text-fg" title={s.health_url!}>
               {host}
             </a>
-            <button onClick={() => setEditing(true)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-fg focus:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100" aria-label={`Change the health URL of ${s.name}`}>
+            <button hidden={locked} onClick={() => setEditing(true)} className="shrink-0 text-faint opacity-0 transition-opacity hover:text-fg focus:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100" aria-label={`Change the health URL of ${s.name}`}>
               <Pencil size={11} />
             </button>
           </span>
@@ -253,7 +255,7 @@ function ServiceGrid({ services, now }: { services: Service[]; now: number }) {
           {down > 0 && <span className="text-err"> · {down} down</span>}
         </span>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div data-tour="services" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((s) => (
           // `layout` slides a card to its new place when it is pinned or muted.
           <motion.div key={s.id} layout="position" transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}>
@@ -325,7 +327,7 @@ export default function OverviewPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 xl:grid-cols-6">
+      <div data-tour="stats" className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 xl:grid-cols-6">
         <Stat label="Services" value={stats.services} />
         <Stat label="Down" value={stats.services_down} tone="var(--err)" />
         <Stat label="Deploys" value={stats.deploys_24h} hint="24h" />

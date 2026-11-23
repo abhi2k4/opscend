@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_DIR = Path(__file__).resolve().parents[2]
@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     cookie_secure: bool = Field(False, alias="OPSCEND_COOKIE_SECURE")
 
     demo: bool = Field(False, alias="OPSCEND_DEMO")
+    # The public showcase: open to anyone without a login, sample data only, real
+    # provider connections refused, and the model replaced by a scripted stand-in.
+    public_demo: bool = Field(False, alias="OPSCEND_PUBLIC_DEMO")
+    # Minutes of quiet after which the public demo's sample data is rebuilt (0 = never).
+    public_demo_refresh_minutes: int = Field(120, alias="OPSCEND_PUBLIC_DEMO_REFRESH_MINUTES")
+    # Answer investigations and chat from a script instead of a model (see demo/simulated.py).
+    ai_simulated_flag: bool = Field(False, alias="OPSCEND_AI_SIMULATED")
+    simulated_delay_seconds: float = Field(0.9, alias="OPSCEND_AI_SIMULATED_DELAY")
     demo_webhook_secret: str = Field("opscend-demo-webhook", alias="OPSCEND_DEMO_WEBHOOK_SECRET")
     auto_migrate: bool = Field(True, alias="OPSCEND_AUTO_MIGRATE")
     # Without Redis the API process runs the periodic poll/health jobs itself; 0 turns that off.
@@ -77,9 +85,25 @@ class Settings(BaseSettings):
             url = url.replace("sslmode=", "ssl=")
         return url
 
+    @model_validator(mode="after")
+    def _public_demo_implies_demo(self) -> "Settings":
+        if self.public_demo:
+            self.demo = True
+        return self
+
+    @property
+    def ai_simulated(self) -> bool:
+        """The public demo never calls a real model, even when a key is present."""
+        return self.public_demo or self.ai_simulated_flag
+
     @property
     def ai_configured(self) -> bool:
-        return bool(self.groq_api_key and self.groq_api_key.strip())
+        """True when investigations and chat can run: a key is set, or they are simulated."""
+        return self.ai_simulated or bool(self.groq_api_key and self.groq_api_key.strip())
+
+    @property
+    def ai_model_name(self) -> str:
+        return "simulated" if self.ai_simulated else self.ai_model
 
     @property
     def email_recipient(self) -> str | None:

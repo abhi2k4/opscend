@@ -30,7 +30,9 @@ NOT_PICKED_UP = (
 TIMED_OUT = "The answer took too long and was stopped. Ask again."
 
 
-async def ask(session: AsyncSession, chat: ChatSession | None, question: str) -> ChatSession:
+async def ask(
+    session: AsyncSession, chat: ChatSession | None, question: str, owner: str | None = None
+) -> ChatSession:
     """Add a question (to a new conversation when `chat` is None) and queue its answer.
 
     Raises HTTP 409 when no LLM key is configured or the previous answer is still
@@ -49,7 +51,7 @@ async def ask(session: AsyncSession, chat: ChatSession | None, question: str) ->
         title = " ".join(question.split())
         if len(title) > MAX_TITLE_CHARS:
             title = title[: MAX_TITLE_CHARS - 1].rstrip() + "…"
-        chat = ChatSession(title=title)
+        chat = ChatSession(title=title, owner=owner)
         session.add(chat)
         await session.flush()
         await session.refresh(chat, ["messages"])
@@ -63,7 +65,7 @@ async def ask(session: AsyncSession, chat: ChatSession | None, question: str) ->
         index=index + 1,
         role="assistant",
         status="pending",
-        model=settings.ai_model,
+        model=settings.ai_model_name,
     )
     session.add(reply)
     chat.updated_at = utcnow()

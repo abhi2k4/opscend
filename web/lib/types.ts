@@ -28,7 +28,10 @@ export type Confidence = "low" | "medium" | "high";
 export interface SystemInfo {
   version: string;
   demo_mode: boolean;
-  ai: { provider: string; model: string; configured: boolean };
+  /** The open showcase: no login, sample data only, nothing real can be connected. */
+  public_demo: boolean;
+  /** `simulated`: answers come from the demo's script, not from a model. */
+  ai: { provider: string; model: string; configured: boolean; simulated: boolean };
   queue: "arq" | "inline";
   database: "postgresql" | "sqlite";
 }

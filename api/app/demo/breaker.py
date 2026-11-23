@@ -206,6 +206,8 @@ async def break_demo(session: AsyncSession, scenario: Scenario) -> tuple[str, st
     )
     if service is None:
         raise DemoUnavailable("demo data is not loaded; POST /api/demo/reset first")
+    # A failure on a service nobody watches would be dropped by the pipeline.
+    service.monitored = True
 
     # One incident can be open per service. So that every run of the demo shows a fresh
     # incident, the previous one on this service is resolved first, as an operator would.

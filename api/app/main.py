@@ -11,6 +11,7 @@ from app import __version__
 from app.core.config import get_settings
 from app.core.db import get_engine, run_migrations, session_scope
 from app.core.logging import configure_logging
+from app.core.public_demo import tag_visitor
 from app.core.queue import init_queue
 from app.core.security import hash_password, verify_password
 from app.core.time import utcnow
@@ -100,4 +101,5 @@ app = FastAPI(
     redoc_url=None,
     openapi_url="/api/openapi.json",
 )
+app.middleware("http")(tag_visitor)
 app.include_router(api_router)
