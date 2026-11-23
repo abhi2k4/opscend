@@ -288,7 +288,7 @@ function Sidebar({ user }: { user: User }) {
             {system.data ? (
               <span className="flex items-center gap-1.5" style={{ color: system.data.ai.configured && !system.data.ai.simulated ? "var(--ok)" : "var(--warn)" }}>
                 <Dot color="currentColor" className="scale-75" />
-                {system.data.ai.simulated ? "simulated" : system.data.ai.configured ? "ready" : "no key"}
+                {system.data.ai.simulated ? "simulated" : system.data.ai.configured ? (system.data.ai.self_hosted ? "self-hosted" : "ready") : "no model"}
               </span>
             ) : (
               <span>…</span>

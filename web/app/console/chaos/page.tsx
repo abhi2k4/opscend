@@ -93,8 +93,8 @@ export default function ChaosPage() {
 
       {system.data && !system.data.ai.configured && (
         <div className="mb-4 rounded-xl border border-warn/30 bg-warn/[0.06] px-4 py-3 text-[13px] leading-relaxed">
-          <span className="font-medium text-warn">No LLM key set.</span> You can break deploys and read logs, but Investigate needs{" "}
-          <code className="font-mono text-fg">GROQ_API_KEY</code> in your .env. Restart the API after adding it.
+          <span className="font-medium text-warn">No AI model set up.</span> You can break deploys and read logs, but Investigate needs a model: set{" "}
+          <code className="font-mono text-fg">GROQ_API_KEY</code> in your .env, or run one yourself with <code className="font-mono text-fg">OPSCEND_AI_PROVIDER=ollama</code>. Restart the API afterwards.
         </div>
       )}
 

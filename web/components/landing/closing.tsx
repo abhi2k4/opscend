@@ -41,7 +41,7 @@ export function Integrations() {
 
 const LINES: { cmd?: string; out?: string; tone?: "ok" | "muted" }[] = [
   { cmd: `git clone ${REPO_URL}.git && cd opscend` },
-  { cmd: "cp .env.example .env   # add GROQ_API_KEY" },
+  { cmd: "cp .env.example .env   # add GROQ_API_KEY, or a local model" },
   { cmd: "docker compose up" },
   { out: "[ok] postgres   healthy", tone: "ok" },
   { out: "[ok] redis      healthy", tone: "ok" },

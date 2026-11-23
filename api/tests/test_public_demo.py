@@ -63,6 +63,7 @@ async def test_a_visitor_needs_no_login_and_sees_the_seeded_demo(public):
         "model": "simulated",
         "configured": True,
         "simulated": True,
+        "self_hosted": False,
     }
     assert (await public.get("/api/auth/me")).json()["email"] == "demo visitor"
     overview = (await public.get("/api/overview")).json()

@@ -14,7 +14,7 @@ The original plan is `docs/Opscend — 2-Week Development Doc.pdf`.
 - Webhook handlers only verify, store a RawEvent, and enqueue. All work happens in jobs, idempotently (dedup keys, upserts).
 - The investigator and Ask Opscend (`api/app/chat/`) have read-only tools only. No tool may change provider state. Log text is untrusted data. Chat citations are verified against the tools' ledger.
 - `OPSCEND_PUBLIC_DEMO=1` is the hosted showcase: no login, real integrations refused (`core/public_demo.py`), the model replaced by `demo/simulated.py`, and a private copy of the data per visitor (`demo/sandbox.py`, chosen by a context variable in `core/db.py`). Reach the database only through `session_scope()` / the session dependency so code lands in the visitor's copy; pass `shared=True` only for data that is not per visitor. Any new route that calls a provider, takes a URL, or stores free text shown to others must be guarded there.
-- The LLM is Groq through its OpenAI-compatible API (`GROQ_API_KEY`, `OPSCEND_AI_MODEL`, `OPSCEND_AI_BASE_URL`).
+- The LLM is Groq by default, or a self-hosted server (`OPSCEND_AI_PROVIDER=ollama|lmstudio|llamacpp|<other>`), always through the OpenAI-compatible chat API in `investigator/llm.py` (`GROQ_API_KEY`, `OPSCEND_AI_MODEL`, `OPSCEND_AI_BASE_URL`). `make check-ai` tests the configured model with a real tool call.
 - Tests: pytest with fixtures in `api/tests/fixtures`; no live API calls.
 - UI: dark tokens from `web/styles/tokens.css`; borders over shadows; mono font for IDs, SHAs, timestamps.
 - Next.js here is v16: read `web/AGENTS.md` and the bundled docs before using unfamiliar APIs.

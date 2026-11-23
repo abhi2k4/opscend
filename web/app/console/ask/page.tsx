@@ -189,7 +189,7 @@ function Ask() {
           )}
           {!configured && (
             <p className="mx-auto mb-2 max-w-3xl text-[12px] text-warn">
-              No AI model is configured. Set <code className="font-mono">GROQ_API_KEY</code> in .env and restart the API.
+              No AI model is configured. Set <code className="font-mono">GROQ_API_KEY</code> in .env, or point <code className="font-mono">OPSCEND_AI_PROVIDER</code> at a model you run yourself, and restart the API.
             </p>
           )}
           <form

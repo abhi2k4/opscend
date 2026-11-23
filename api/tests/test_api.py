@@ -44,6 +44,7 @@ async def test_public_endpoints(anon_client):
         "model": "test-model",
         "configured": False,
         "simulated": False,
+        "self_hosted": False,
     }
     assert system.public_demo is False
     assert (await anon_client.get("/api/docs")).status_code == 200

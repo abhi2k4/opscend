@@ -41,6 +41,8 @@ class AIInfo(Schema):
     configured: bool
     # True when answers come from the demo's script, not from a model.
     simulated: bool = False
+    # True when the model runs on a server the operator controls (Ollama, vLLM, ...).
+    self_hosted: bool = False
 
 
 class SystemInfo(Schema):

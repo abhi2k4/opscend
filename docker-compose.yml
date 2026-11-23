@@ -35,6 +35,9 @@ services:
       - path: .env
         required: false
     environment: *api-env
+    # Lets the container reach a model server on the host (Ollama, LM Studio) on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
@@ -62,6 +65,8 @@ services:
       - path: .env
         required: false
     environment: *api-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       api:
         condition: service_healthy
@@ -89,5 +94,22 @@ services:
       - "8025:8025" # web inbox
       - "1025:1025" # SMTP, for an API running outside Docker
 
+  # A self-hosted model instead of Groq. Start it with:
+  #   docker compose --profile ollama up -d ollama
+  #   docker compose exec ollama ollama pull qwen3:8b
+  # then set OPSCEND_AI_PROVIDER=ollama, OPSCEND_AI_BASE_URL=http://ollama:11434/v1 and
+  # OPSCEND_AI_MODEL=qwen3:8b in .env and restart the api and worker.
+  # CPU only as written; see the Ollama Docker docs to pass a GPU through.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    environment:
+      OLLAMA_CONTEXT_LENGTH: "16384" # the default is too small for build logs
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+
 volumes:
   pgdata:
+  ollama:

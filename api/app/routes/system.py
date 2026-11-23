@@ -35,6 +35,7 @@ async def system() -> schemas.SystemInfo:
             model=settings.ai_model_name,
             configured=settings.ai_configured,
             simulated=settings.ai_simulated,
+            self_hosted=settings.ai_self_hosted and not settings.ai_simulated,
         ),
         queue=settings.queue_kind,
         database=settings.database_kind,

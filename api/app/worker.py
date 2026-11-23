@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 from arq import cron
 from arq.connections import RedisSettings
 
+from app.chat.service import job_timeout as model_job_timeout
 from app.core.config import get_settings
 from app.core.db import dispose_all
 from app.core.logging import configure_logging
@@ -39,4 +40,4 @@ class WorkerSettings:
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url or "redis://localhost:6379")
     max_jobs = 10
-    job_timeout = 300
+    job_timeout = int(model_job_timeout().total_seconds())  # 5 min; 30 with a self-hosted model
