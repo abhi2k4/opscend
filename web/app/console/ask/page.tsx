@@ -151,7 +151,7 @@ function Ask() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {!chatId && !sending && (
-            <Suggestions onPick={send}>
+            <Suggestions onPick={send} demo={system.data?.demo_mode}>
               <Sherlog size={56} animated={false} />
               <h2 className="mt-3 text-[17px] font-medium tracking-tight">Ask about your deploys</h2>
               <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-muted">
@@ -182,6 +182,11 @@ function Ask() {
         </div>
 
         <div className="shrink-0 border-t border-line p-3">
+          {system.data?.ai.simulated && (
+            <p className="mx-auto mb-2 max-w-3xl text-[12px] text-muted">
+              <span className="text-warn">Simulated answers.</span> This demo replies from a script to a fixed set of questions about the sample data. On your own install a real model answers anything.
+            </p>
+          )}
           {!configured && (
             <p className="mx-auto mb-2 max-w-3xl text-[12px] text-warn">
               No AI model is configured. Set <code className="font-mono">GROQ_API_KEY</code> in .env and restart the API.

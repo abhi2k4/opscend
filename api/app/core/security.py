@@ -15,6 +15,7 @@ from app.models import User
 
 SESSION_COOKIE = "opscend_session"
 _ALGORITHM = "HS256"
+GUEST_ID = "guest"
 
 
 def hash_password(password: str) -> str:
@@ -50,6 +51,9 @@ async def current_user(request: Request, session: AsyncSession = Depends(get_ses
     token = request.cookies.get(SESSION_COOKIE)
     user_id = read_session_token(token) if token else None
     user = await session.get(User, user_id) if user_id else None
+    if user is None and get_settings().public_demo:
+        # The public demo has no login: every visitor is the same read-mostly guest.
+        return User(id=GUEST_ID, email="demo visitor", password_hash="")
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     return user

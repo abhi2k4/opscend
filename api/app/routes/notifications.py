@@ -1,10 +1,11 @@
 """In-app notifications and email alert settings."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update
 
 from app import models, schemas
 from app.core.config import get_settings
+from app.core.public_demo import forbid_in_public_demo
 from app.core.time import utcnow
 from app.notifications.email import EmailError, send_email
 from app.notifications.service import KINDS
@@ -48,7 +49,7 @@ async def notification_settings() -> schemas.NotificationSettings:
     )
 
 
-@router.post("/notifications/test-email")
+@router.post("/notifications/test-email", dependencies=[Depends(forbid_in_public_demo)])
 async def test_email() -> schemas.Ok:
     try:
         await send_email(

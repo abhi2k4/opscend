@@ -53,7 +53,7 @@ async def start_investigation(
         deployment_id=deployment.id if deployment else None,
         incident_id=incident_id,
         service_name=deployment.service.name if deployment else service_name,
-        model=settings.ai_model,
+        model=settings.ai_model_name,
     )
     session.add(investigation)
     await session.commit()
@@ -85,7 +85,8 @@ async def auto_investigate(session: AsyncSession, incident: Incident) -> Investi
             Investigation.created_at >= utcnow() - timedelta(hours=24)
         )
     )
-    if (recent or 0) >= settings.auto_investigate_daily_limit:
+    # The cap protects an LLM quota; a simulated run uses none.
+    if not settings.ai_simulated and (recent or 0) >= settings.auto_investigate_daily_limit:
         log.info("auto-investigation skipped for %s: daily limit reached", incident.id)
         return None
     return await start_investigation(session, deployment=deployment, incident_id=incident.id)

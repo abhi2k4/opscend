@@ -7,7 +7,9 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 # The /api rewrite target is resolved at build time.
 ARG OPSCEND_API_URL=http://api:8000
-ENV OPSCEND_API_URL=$OPSCEND_API_URL NEXT_TELEMETRY_DISABLED=1
+# 1 = this build fronts the public demo: the landing page says "Try the live demo".
+ARG OPSCEND_PUBLIC_DEMO=0
+ENV OPSCEND_API_URL=$OPSCEND_API_URL OPSCEND_PUBLIC_DEMO=$OPSCEND_PUBLIC_DEMO NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 FROM node:22-alpine

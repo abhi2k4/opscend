@@ -8,7 +8,11 @@ const LANDING_ONLY = (process.env.OPSCEND_LANDING_ONLY ?? (process.env.VERCEL ? 
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  env: { NEXT_PUBLIC_OPSCEND_LANDING_ONLY: LANDING_ONLY ? "1" : "0" },
+  env: {
+    NEXT_PUBLIC_OPSCEND_LANDING_ONLY: LANDING_ONLY ? "1" : "0",
+    // Only changes wording on the landing page ("Try the live demo"); the API decides the rest.
+    NEXT_PUBLIC_OPSCEND_PUBLIC_DEMO: process.env.OPSCEND_PUBLIC_DEMO === "1" ? "1" : "0",
+  },
   // The console talks to the FastAPI service through same-origin /api/*,
   // so the session cookie never needs CORS.
   async rewrites() {

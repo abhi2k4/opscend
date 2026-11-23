@@ -4,12 +4,12 @@ import { ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/primitives";
 import { Wordmark } from "@/components/ui/provider";
 import { Sherlog } from "@/components/ui/sherlog";
-import { api, ApiError } from "@/lib/api";
-import type { User } from "@/lib/types";
+import { api, ApiError, useApi } from "@/lib/api";
+import type { SystemInfo, User } from "@/lib/types";
 
 function LoginForm() {
   const router = useRouter();
@@ -18,6 +18,11 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The public demo has no login: everyone is already in.
+  const system = useApi<SystemInfo>("/system", { revalidateOnFocus: false });
+  useEffect(() => {
+    if (system.data?.public_demo) router.replace("/console");
+  }, [system.data, router]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

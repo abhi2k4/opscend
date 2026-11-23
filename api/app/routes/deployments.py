@@ -1,9 +1,10 @@
 """Deployments: list, detail, logs, diff, and starting an investigation."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
 from app import models, schemas
+from app.core.public_demo import paced
 from app.integrations.base import ProviderError
 from app.investigator.service import start_investigation
 from app.services import changes, diffs, logs
@@ -98,7 +99,7 @@ async def get_changes(deployment_id: str, session: SessionDep) -> schemas.Deploy
     return await changes.get_changes(session, deployment)
 
 
-@router.post("/{deployment_id}/investigate")
+@router.post("/{deployment_id}/investigate", dependencies=[Depends(paced("investigate", 3))])
 async def investigate(deployment_id: str, session: SessionDep) -> schemas.Investigation:
     deployment = await get_or_404(session, models.Deployment, deployment_id)
     incident_id = await session.scalar(

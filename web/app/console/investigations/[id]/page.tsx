@@ -44,6 +44,11 @@ export default function InvestigationPage() {
             <Tag color={STATUS_COLOR[inv.status]}>
               <Dot color={STATUS_COLOR[inv.status]} pulse={live} className="scale-75" /> {inv.status}
             </Tag>
+            {inv.model === "simulated" && (
+              <span title="The steps and the conclusion come from the demo's script, not from a model. The tools and the evidence check are real.">
+                <Tag color="var(--warn)">simulated run</Tag>
+              </span>
+            )}
             <Mono value={inv.id} display={inv.id.length > 14 ? `${inv.id.slice(0, 12)}…` : inv.id} />
           </div>
           <div className="mt-2">
@@ -61,11 +66,11 @@ export default function InvestigationPage() {
       </div>
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-        <Panel>
+        <Panel data-tour="trace">
           <PanelHeader title="Trace" right={<span className="label-mono text-faint">click a span for input and output</span>} />
           <TraceView inv={inv} />
         </Panel>
-        <Panel className="lg:sticky lg:top-0">
+        <Panel data-tour="report" className="lg:sticky lg:top-0">
           <PanelHeader title="Report" right={<span className="label-mono text-faint">read-only analysis</span>} />
           <ReportView inv={inv} />
         </Panel>

@@ -13,6 +13,7 @@ The original plan is `docs/Opscend — 2-Week Development Doc.pdf`.
 - Never log or return provider tokens. Encrypt at rest with `core/crypto.py`.
 - Webhook handlers only verify, store a RawEvent, and enqueue. All work happens in jobs, idempotently (dedup keys, upserts).
 - The investigator and Ask Opscend (`api/app/chat/`) have read-only tools only. No tool may change provider state. Log text is untrusted data. Chat citations are verified against the tools' ledger.
+- `OPSCEND_PUBLIC_DEMO=1` is the hosted showcase: no login, real integrations refused (`core/public_demo.py`), the model replaced by `demo/simulated.py`. Any new route that calls a provider, takes a URL, or stores free text shown to others must be guarded there.
 - The LLM is Groq through its OpenAI-compatible API (`GROQ_API_KEY`, `OPSCEND_AI_MODEL`, `OPSCEND_AI_BASE_URL`).
 - Tests: pytest with fixtures in `api/tests/fixtures`; no live API calls.
 - UI: dark tokens from `web/styles/tokens.css`; borders over shadows; mono font for IDs, SHAs, timestamps.

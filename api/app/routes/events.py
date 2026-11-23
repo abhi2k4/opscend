@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
 
 from app import models, schemas
+from app.core.public_demo import forbid_in_public_demo
 from app.core.queue import get_queue
 from app.ingest.webhooks import UnknownProviderError, receive_webhook
 from app.integrations.base import WebhookVerificationError
@@ -23,6 +24,7 @@ MAX_BODY_BYTES = 5 * 1024 * 1024
 @public_router.post("/webhooks/{provider}", status_code=202)
 async def webhook(provider: str, request: Request, session: SessionDep) -> schemas.Accepted:
     """Verify, store, enqueue, return. All real work happens in the job."""
+    forbid_in_public_demo()  # its webhook secret is public, so it accepts none
     body = await request.body()
     if len(body) > MAX_BODY_BYTES:
         raise HTTPException(413, "Webhook body too large")

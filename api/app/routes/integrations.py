@@ -1,10 +1,11 @@
 """Connecting provider accounts. Tokens go in, only `token_hint` ever comes out."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
 from app import models, schemas
 from app.core.crypto import encrypt, token_hint
+from app.core.public_demo import forbid_in_public_demo
 from app.core.queue import get_queue
 from app.core.time import utcnow
 from app.ingest import poller
@@ -35,7 +36,7 @@ async def list_integrations(session: SessionDep) -> list[schemas.Integration]:
     return [_out(row) for row in rows.all()]
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(forbid_in_public_demo)])
 async def create_integration(
     body: schemas.IntegrationCreate, session: SessionDep
 ) -> schemas.Integration:
@@ -83,7 +84,7 @@ async def _sync(session: SessionDep, integration_id: str) -> schemas.Integration
     return _out(await get_or_404(session, models.Integration, integration_id))
 
 
-@router.post("/{integration_id}/test")
+@router.post("/{integration_id}/test", dependencies=[Depends(forbid_in_public_demo)])
 async def test_integration(integration_id: str, session: SessionDep) -> schemas.Integration:
     """Re-validate the stored token against the provider."""
     integration = await get_or_404(session, models.Integration, integration_id)
@@ -103,7 +104,7 @@ async def test_integration(integration_id: str, session: SessionDep) -> schemas.
     return _out(integration)
 
 
-@router.post("/{integration_id}/sync")
+@router.post("/{integration_id}/sync", dependencies=[Depends(forbid_in_public_demo)])
 async def sync_integration(integration_id: str, session: SessionDep) -> schemas.Integration:
     await get_or_404(session, models.Integration, integration_id)
     return await _sync(session, integration_id)
@@ -158,7 +159,7 @@ async def _services(session: SessionDep, integration_id: str) -> list[schemas.Se
     return [await service_out(session, row) for row in rows.all()]
 
 
-@router.delete("/{integration_id}")
+@router.delete("/{integration_id}", dependencies=[Depends(forbid_in_public_demo)])
 async def delete_integration(integration_id: str, session: SessionDep) -> schemas.Ok:
     """Disconnect an account. Its services, deployments and incidents go with it."""
     integration = await get_or_404(session, models.Integration, integration_id)

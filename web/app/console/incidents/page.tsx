@@ -57,10 +57,10 @@ export default function IncidentsPage() {
             {filter === "open" ? "Every service's latest deploy is healthy." : "Nothing has failed yet."}
           </Empty>
         )}
-        {data?.map((i) => {
+        {data?.map((i, n) => {
           const open = i.status === "open";
           return (
-            <div key={i.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-soft px-4 py-3.5 last:border-0">
+            <div key={i.id} data-tour={n === 0 ? "incident" : undefined} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line-soft px-4 py-3.5 last:border-0">
               <span className={cn("grid size-8 shrink-0 place-items-center rounded-md border", open ? "border-err/40 bg-err/10 text-err" : "border-line bg-raised text-muted")}>
                 {i.trigger === "deploy_failed" ? <Rocket size={14} /> : <HeartPulse size={14} />}
               </span>

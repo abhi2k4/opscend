@@ -2,10 +2,12 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 
 from app import models, schemas
+from app.core.config import get_settings
+from app.core.public_demo import paced
 from app.core.time import utcnow
 from app.incidents import rules
 from app.investigator.service import start_investigation
@@ -64,6 +66,8 @@ async def rate_investigation(
     if investigation.status != "completed":
         raise HTTPException(409, "Only a finished report can be rated")
     note = (body.note or "").strip() or None
+    if get_settings().public_demo:
+        note = None  # free text from one visitor is never shown to the next
     investigation.feedback_rating = body.rating
     investigation.feedback_note = note if body.rating else None
     investigation.feedback_at = utcnow() if body.rating else None
@@ -102,7 +106,9 @@ async def resolve_incident(incident_id: str, session: SessionDep) -> schemas.Inc
     return await incident_out(session, incident)
 
 
-@router.post("/incidents/{incident_id}/investigate")
+@router.post(
+    "/incidents/{incident_id}/investigate", dependencies=[Depends(paced("investigate", 3))]
+)
 async def investigate_incident(incident_id: str, session: SessionDep) -> schemas.Investigation:
     incident = await get_or_404(session, models.Incident, incident_id)
     deployment = (

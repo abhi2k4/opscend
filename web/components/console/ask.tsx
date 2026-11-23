@@ -278,19 +278,20 @@ function Thinking({ message }: { message: ChatMessage }) {
   );
 }
 
-export function Suggestions({ onPick, children }: { onPick: (q: string) => void; children?: ReactNode }) {
+export function Suggestions({ onPick, children, demo }: { onPick: (q: string) => void; children?: ReactNode; demo?: boolean }) {
   const questions = [
     "Which services had failed deploys this week?",
     "Why did the last failed deploy fail?",
     "What's the failure rate and recovery time per service?",
-    "Search the logs for ECONNREFUSED",
+    // The sample data has no connection errors, so the demo searches for something it does have.
+    demo ? "Search the logs for STRIPE_WEBHOOK_SECRET" : "Search the logs for ECONNREFUSED",
     "Are any services unhealthy right now?",
     "What did the most recent commits change?",
   ];
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-4 py-12 text-center">
       {children}
-      <div className="mt-6 grid grid-cols-1 w-full gap-2 sm:grid-cols-2">
+      <div data-tour="ask" className="mt-6 grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
         {questions.map((q) => (
           <button key={q} onClick={() => onPick(q)} className="rounded-lg border border-line bg-surface px-3 py-2.5 text-left text-[12.5px] text-muted transition-colors hover:border-[var(--line-strong)] hover:text-fg">
             {q}

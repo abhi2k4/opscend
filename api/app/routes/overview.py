@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app import models, schemas
+from app.core.public_demo import forbid_in_public_demo
 from app.core.time import utcnow
 from app.services.presenters import (
     deployment_out,
@@ -59,6 +60,7 @@ async def update_service(
     """
     service = await get_or_404(session, models.Service, service_id)
     if "health_url" in body.model_fields_set:
+        forbid_in_public_demo()  # a health URL makes the server call an address of your choice
         if body.health_url is None:
             service.health_url = None
         else:

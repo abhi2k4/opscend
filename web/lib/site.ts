@@ -10,7 +10,12 @@ export const VERSION = "0.1.0";
  */
 export const LANDING_ONLY = process.env.NEXT_PUBLIC_OPSCEND_LANDING_ONLY === "1";
 
+/** True when this build fronts the public demo (OPSCEND_PUBLIC_DEMO=1 at build time). */
+export const PUBLIC_DEMO = process.env.NEXT_PUBLIC_OPSCEND_PUBLIC_DEMO === "1";
+
 /** The main call to action: the console where there is one, the setup guide where there is not. */
 export const PRIMARY_CTA = LANDING_ONLY
   ? { href: DOCS_URL, label: "Read the docs", short: "Docs" }
-  : { href: "/console", label: "Open the console", short: "Console" };
+  : PUBLIC_DEMO
+    ? { href: "/console", label: "Try the live demo", short: "Live demo" }
+    : { href: "/console", label: "Open the console", short: "Console" };
