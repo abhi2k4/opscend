@@ -48,12 +48,14 @@ def read_session_token(token: str) -> str | None:
 
 
 async def current_user(request: Request, session: AsyncSession = Depends(get_session)) -> User:
+    if get_settings().public_demo:
+        # The public demo has no login: every visitor is the same guest, including one
+        # whose browser still holds a session cookie from before the site became a demo.
+        # (A visitor's private copy of the data has no accounts in it to look up.)
+        return User(id=GUEST_ID, email="demo visitor", password_hash="")
     token = request.cookies.get(SESSION_COOKIE)
     user_id = read_session_token(token) if token else None
     user = await session.get(User, user_id) if user_id else None
-    if user is None and get_settings().public_demo:
-        # The public demo has no login: every visitor is the same read-mostly guest.
-        return User(id=GUEST_ID, email="demo visitor", password_hash="")
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     return user

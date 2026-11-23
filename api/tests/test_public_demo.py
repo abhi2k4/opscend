@@ -7,11 +7,19 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.core import db, public_demo
+from app.core import db, public_demo, security
 from app.core.db import session_scope
 from app.core.time import utcnow
 from app.demo import sandbox, seed
-from app.models import Commit, CommitDiff, DemoSandbox, Deployment, Integration, Investigation
+from app.models import (
+    Commit,
+    CommitDiff,
+    DemoSandbox,
+    Deployment,
+    Integration,
+    Investigation,
+    User,
+)
 from tests.conftest import ADMIN, _clear_caches, drain_jobs, make_service, running_app
 
 SCENARIOS = ["bad-env-var", "syntax-error", "failing-migration", "dependency-bump", "timeout"]
@@ -350,3 +358,13 @@ async def test_accounts_connected_before_it_went_public_are_removed(env):
             assert await session.scalar(select(Commit).where(Commit.repo == "me/private")) is None
         broke = await client.post("/api/demo/break", json={"scenario_id": "bad-env-var"})
         assert broke.status_code == 200, broke.text
+
+
+async def test_a_leftover_login_cookie_is_ignored(public):
+    """Someone who signed in before the site became a demo is a guest like everyone else."""
+    async with session_scope() as session:
+        admin = await session.scalar(select(User))
+    public.cookies.set(security.SESSION_COOKIE, security.create_session_token(admin.id))
+    me = await public.get("/api/auth/me")
+    assert me.status_code == 200 and me.json()["email"] == "demo visitor"
+    assert (await public.get("/api/overview")).status_code == 200
