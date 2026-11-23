@@ -32,8 +32,7 @@ def load_fixture(name: str) -> Any:
 
 def _clear_caches() -> None:
     get_settings.cache_clear()
-    db.get_engine.cache_clear()
-    db.get_sessionmaker.cache_clear()
+    db.reset_caches()
     crypto._fernet.cache_clear()
 
 

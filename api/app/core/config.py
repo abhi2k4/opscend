@@ -31,8 +31,12 @@ class Settings(BaseSettings):
     # The public showcase: open to anyone without a login, sample data only, real
     # provider connections refused, and the model replaced by a scripted stand-in.
     public_demo: bool = Field(False, alias="OPSCEND_PUBLIC_DEMO")
-    # Minutes of quiet after which the public demo's sample data is rebuilt (0 = never).
+    # Minutes after which the public demo's sample data is rebuilt (0 = never).
     public_demo_refresh_minutes: int = Field(120, alias="OPSCEND_PUBLIC_DEMO_REFRESH_MINUTES")
+    # Each visitor explores a private copy. It is deleted after this many idle minutes,
+    # and the least recently used one goes when there are more than the maximum.
+    public_demo_session_minutes: int = Field(120, alias="OPSCEND_PUBLIC_DEMO_SESSION_MINUTES")
+    public_demo_max_sessions: int = Field(300, alias="OPSCEND_PUBLIC_DEMO_MAX_SESSIONS")
     # Answer investigations and chat from a script instead of a model (see demo/simulated.py).
     ai_simulated_flag: bool = Field(False, alias="OPSCEND_AI_SIMULATED")
     simulated_delay_seconds: float = Field(0.9, alias="OPSCEND_AI_SIMULATED_DELAY")

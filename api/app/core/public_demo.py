@@ -1,20 +1,30 @@
 """Rules of the public demo (`OPSCEND_PUBLIC_DEMO=1`).
 
-Anyone on the internet can open it, so: no real provider is ever contacted, nothing a
-visitor types is shown to another visitor, and the things a visitor can do are paced.
+Anyone on the internet can open it, so: no real provider is ever contacted, every
+visitor works in a private copy of the sample data (`demo/sandbox.py`), and the things
+a visitor can do are paced.
 """
 
 import time
 import uuid
 
 from fastapi import HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.db import use_sandbox
 
 VISITOR_COOKIE = "opscend_visitor"
 SELF_HOST_HINT = (
     "This is the public demo, so that is turned off here. Run Opscend on your own machine "
     "to try it for real: git clone, cp .env.example .env, docker compose up."
+)
+
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+NO_SANDBOX = (
+    "Your private copy of the demo is not ready yet. The demo needs cookies: "
+    "reload the page and try again."
 )
 
 
@@ -30,17 +40,31 @@ def visitor_id(request: Request) -> str | None:
 
 
 async def tag_visitor(request: Request, call_next):  # noqa: ANN001, ANN201
-    """Middleware: give each browser of the public demo an id cookie."""
+    """Middleware: give each browser of the public demo an id cookie and its own data.
+
+    A browser that already has the cookie works in its private sandbox. One without it
+    (the very first requests, or a client that keeps no cookies) reads the shared sample
+    data and cannot change anything, so parallel first requests never build sandboxes.
+    """
     settings = get_settings()
     if not settings.public_demo:
         return await call_next(request)
+    from app.demo import sandbox  # imported late: it needs the models
+
     known = request.cookies.get(VISITOR_COOKIE, "")
-    visitor = known if _valid(known) else str(uuid.uuid4())
+    returning = _valid(known)
+    visitor = known if returning else str(uuid.uuid4())
     request.state.visitor = visitor
     # A client that sends no cookie gets a new id every time, so it is paced by address.
-    request.state.visitor_is_new = visitor != known
-    response: Response = await call_next(request)
-    if visitor != known:
+    request.state.visitor_is_new = not returning
+    name = await sandbox.enter(visitor) if returning else None
+    response: Response
+    if name is None and request.method not in SAFE_METHODS:
+        response = JSONResponse({"detail": NO_SANDBOX}, status_code=409)
+    else:
+        with use_sandbox(name):
+            response = await call_next(request)
+    if not returning:
         response.set_cookie(
             VISITOR_COOKIE,
             visitor,

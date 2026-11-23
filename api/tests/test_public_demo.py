@@ -1,16 +1,17 @@
 """The public demo: open to anyone, nothing real connected, the model simulated."""
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 import pytest
 from sqlalchemy import select
 
-from app.core import public_demo
+from app.core import db, public_demo
 from app.core.db import session_scope
 from app.core.time import utcnow
-from app.demo import seed
-from app.models import Commit, CommitDiff, Deployment, Integration, Investigation, RawEvent
+from app.demo import sandbox, seed
+from app.models import Commit, CommitDiff, DemoSandbox, Deployment, Integration, Investigation
 from tests.conftest import ADMIN, _clear_caches, drain_jobs, make_service, running_app
 
 SCENARIOS = ["bad-env-var", "syntax-error", "failing-migration", "dependency-bump", "timeout"]
@@ -26,7 +27,14 @@ async def public(env) -> AsyncIterator[httpx.AsyncClient]:
     _clear_caches()
     public_demo._last.clear()
     async with running_app() as client:
+        await client.get("/api/system")  # the first response carries the visitor cookie
+        await client.get("/api/system")  # the second one starts the private copy
         yield client
+
+
+def mine(client: httpx.AsyncClient):  # noqa: ANN201
+    """Database access to this visitor's private copy: `with mine(client): ...`."""
+    return db.use_sandbox(sandbox.name_for(client.cookies[public_demo.VISITOR_COOKIE]))
 
 
 async def ask(client: httpx.AsyncClient, question: str) -> dict:
@@ -101,7 +109,9 @@ async def test_a_broken_deploy_is_investigated_by_the_script(public, scenario_id
 async def test_a_failure_the_script_does_not_know_is_reported_as_inconclusive(public):
     broken = (await public.post("/api/demo/break", json={"scenario_id": "syntax-error"})).json()
     await drain_jobs()
-    async with session_scope() as session:
+    with mine(public):
+        session_ctx = session_scope()
+    async with session_ctx as session:
         deployment = await session.get(Deployment, broken["deployment_id"])
         rows = [
             deployment,
@@ -193,13 +203,103 @@ async def test_actions_are_paced_per_visitor(public):
     assert "try again" in again.json()["detail"]
 
 
-async def test_stale_sample_data_is_rebuilt_only_when_quiet(public, env):
+@asynccontextmanager
+async def other_visitor(public: httpx.AsyncClient) -> AsyncIterator[httpx.AsyncClient]:
+    """A second browser on the same app."""
+    async with httpx.AsyncClient(transport=public._transport, base_url="http://test") as other:
+        await other.get("/api/system")
+        await other.get("/api/system")
+        yield other
+
+
+async def test_each_visitor_explores_a_private_copy(public):
+    async with other_visitor(public) as other:
+        before = (await other.get("/api/overview")).json()
+        services = (await public.get("/api/services")).json()
+        # Same ids as the shared data, so a page loaded before the cookie arrived still works.
+        assert [s["id"] for s in (await other.get("/api/services")).json()] == [
+            s["id"] for s in services
+        ]
+
+        broken = await public.post("/api/demo/break", json={"scenario_id": "syntax-error"})
+        assert broken.status_code == 200, broken.text
+        await drain_jobs()
+        muted = await public.patch(f"/api/services/{services[0]['id']}", json={"muted": True})
+        assert muted.status_code == 200, muted.text
+
+        mine_now = (await public.get("/api/overview")).json()
+        assert mine_now["stats"]["open_incidents"] == before["stats"]["open_incidents"] + 1
+        assert len((await public.get("/api/investigations")).json()) == 2
+        # The other visitor, and the shared data new visitors start from, saw none of it.
+        assert (await other.get("/api/overview")).json()["stats"] == before["stats"]
+        assert len((await other.get("/api/investigations")).json()) == 1
+        missing = await other.get(f"/api/deployments/{broken.json()['deployment_id']}")
+        assert missing.status_code == 404
+        assert not any(s["muted"] for s in (await other.get("/api/services")).json())
+        async with session_scope() as session:
+            assert len((await session.scalars(select(Investigation))).all()) == 1
+
+        # Reset only rebuilds the copy of the visitor who pressed it.
+        public_demo._last.clear()
+        assert (
+            await other.post("/api/demo/break", json={"scenario_id": "syntax-error"})
+        ).status_code == 200
+        await drain_jobs()
+        assert (await public.post("/api/demo/reset")).status_code == 200
+        assert (await public.get("/api/overview")).json()["stats"]["open_incidents"] == 1
+        assert (await other.get("/api/overview")).json()["stats"]["open_incidents"] == 2
+
+
+async def test_a_client_without_the_cookie_reads_shared_data_and_changes_nothing(public):
+    async with httpx.AsyncClient(transport=public._transport, base_url="http://test") as bare:
+        refused = await bare.post("/api/demo/break", json={"scenario_id": "timeout"})
+        assert refused.status_code == 409 and "cookies" in refused.json()["detail"]
+        bare.cookies.clear()
+        assert (await bare.get("/api/overview")).json()["stats"]["services"] == 3
+    async with session_scope() as session:
+        assert len((await session.scalars(select(DemoSandbox))).all()) == 1  # only `public`
+
+
+async def test_idle_and_surplus_sandboxes_are_deleted(public, env):
+    async def sandboxes() -> list[str]:
+        async with session_scope() as session:
+            return list((await session.scalars(select(DemoSandbox.id))).all())
+
+    first = await sandboxes()
+    folder = db.sandbox_dir()
+    assert len(first) == 1 and (folder / f"{first[0]}.db").exists()
+
+    env.setenv("OPSCEND_PUBLIC_DEMO_MAX_SESSIONS", "1")
+    _clear_caches()
+    async with other_visitor(public) as other:
+        assert (await other.get("/api/overview")).status_code == 200
+        second = await sandboxes()
+        assert len(second) == 1 and second != first  # the older one made room
+        assert not (folder / f"{first[0]}.db").exists()
+
+        assert await seed.refresh_public_demo() is False  # in use: kept
+        async with session_scope() as session:
+            row = await session.get(DemoSandbox, second[0])
+            row.last_seen_at -= seed.timedelta(hours=3)
+            await session.commit()
+        assert await seed.refresh_public_demo() is False
+        assert await sandboxes() == []
+        # Coming back later simply starts a fresh copy.
+        assert (await other.get("/api/overview")).json()["stats"]["open_incidents"] == 1
+        assert len(await sandboxes()) == 1
+
+
+async def test_stale_shared_sample_data_is_rebuilt(public, env):
     async def seeded_ids() -> set[str]:
         async with session_scope() as session:
             return set((await session.scalars(select(Integration.id))).all())
 
     before = await seeded_ids()
     assert await seed.refresh_public_demo() is False  # freshly seeded
+    async with session_scope() as session:
+        for integration in (await session.scalars(select(Integration))).all():
+            integration.created_at -= seed.timedelta(hours=3)
+        await session.commit()
 
     env.setenv("OPSCEND_PUBLIC_DEMO_REFRESH_MINUTES", "0")
     _clear_caches()
@@ -207,24 +307,11 @@ async def test_stale_sample_data_is_rebuilt_only_when_quiet(public, env):
 
     env.setenv("OPSCEND_PUBLIC_DEMO_REFRESH_MINUTES", "120")
     _clear_caches()
-    async with session_scope() as session:
-        for integration in (await session.scalars(select(Integration))).all():
-            integration.last_synced_at -= seed.timedelta(hours=3)
-        await session.commit()
-    await public.post("/api/demo/break", json={"scenario_id": "timeout"})
-    await drain_jobs()
-    assert await seed.refresh_public_demo() is False  # a visitor is in the middle of something
-    assert await seeded_ids() == before
-
-    async with session_scope() as session:
-        for run in (await session.scalars(select(Investigation))).all():
-            run.created_at -= seed.timedelta(hours=1)
-        for event in (await session.scalars(select(RawEvent))).all():
-            event.received_at -= seed.timedelta(hours=1)
-        await session.commit()
     assert await seed.refresh_public_demo() is True
     assert not (await seeded_ids() & before)
-    assert (await public.get("/api/overview")).json()["stats"]["open_incidents"] == 1
+    # A visitor in the middle of something keeps the copy they were working in.
+    mine_ids = {i["id"] for i in (await public.get("/api/integrations")).json()}
+    assert mine_ids == before
 
 
 async def test_the_simulation_is_off_unless_asked_for(demo_client):

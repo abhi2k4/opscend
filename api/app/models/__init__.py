@@ -5,7 +5,7 @@ from app.models.base import Base, new_id
 from app.models.catalog import Commit, CommitDiff, Deployment, LogLine, Service
 from app.models.chat import ChatMessage, ChatSession
 from app.models.investigation import Investigation, InvestigationStep
-from app.models.ops import HealthCheck, Incident, Notification, RawEvent
+from app.models.ops import DemoSandbox, HealthCheck, Incident, Notification, RawEvent
 
 __all__ = [
     "Base",
@@ -13,6 +13,7 @@ __all__ = [
     "ChatSession",
     "Commit",
     "CommitDiff",
+    "DemoSandbox",
     "Deployment",
     "HealthCheck",
     "Incident",

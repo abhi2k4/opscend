@@ -270,7 +270,7 @@ export function TourProvider({ children, autoStart }: { children: ReactNode; aut
             }
           >
             <p>
-              You are in a live console with sample data. Break a deploy, watch the incident open and read the investigator&apos;s report. Nothing here touches a real provider, and the AI answers are scripted.
+              You are in a live console with your own private copy of the sample data, so nothing you do affects anyone else. Break a deploy, watch the incident open and read the investigator&apos;s report. Nothing here touches a real provider, and the AI answers are scripted.
             </p>
           </Card>
         )}
