@@ -13,6 +13,7 @@ from app.jobs import (
     JOBS,
     deliver_notifications,
     expire_chat_replies,
+    expire_investigations,
     health_checks,
     prune,
     reconcile,
@@ -34,6 +35,7 @@ class WorkerSettings:
         cron(health_checks, second={30}),  # every 60s, offset from the poller
         cron(deliver_notifications, second={5, 20, 35, 50}),  # email outbox, every 15s
         cron(expire_chat_replies, second={45}),  # every 60s: fail chat replies whose job was lost
+        cron(expire_investigations, second={55}),  # every 60s: same for investigations
         cron(prune, minute={7}, second={0}),  # hourly: retention (OPSCEND_RETENTION_DAYS)
     ]
     on_startup = startup

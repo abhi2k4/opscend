@@ -16,6 +16,7 @@ from app.demo.seed import refresh_public_demo
 from app.incidents.health import run_health_checks
 from app.ingest import normalizer, poller
 from app.investigator.orchestrator import run_investigation
+from app.investigator.service import expire_stale_investigations
 from app.notifications.email import deliver_pending
 from app.services.retention import prune_old_data
 
@@ -36,6 +37,10 @@ async def chat_reply(ctx: dict[str, Any], message_id: str) -> None:
 
 async def expire_chat_replies(ctx: dict[str, Any]) -> None:
     await expire_stale_replies()
+
+
+async def expire_investigations(ctx: dict[str, Any]) -> None:
+    await expire_stale_investigations()
 
 
 async def prune(ctx: dict[str, Any]) -> None:
@@ -65,7 +70,7 @@ async def deliver_notifications(ctx: dict[str, Any]) -> None:
 
 
 # In the public demo these look after every visitor's sandbox, not only the shared data.
-PER_SANDBOX = {"reconcile", "health_checks", "expire_chat_replies"}
+PER_SANDBOX = {"reconcile", "health_checks", "expire_chat_replies", "expire_investigations"}
 
 
 def _sandboxed(job: Any) -> Any:
@@ -104,6 +109,7 @@ sync_integration = _sandboxed(sync_integration)
 reconcile = _sandboxed(reconcile)
 health_checks = _sandboxed(health_checks)
 expire_chat_replies = _sandboxed(expire_chat_replies)
+expire_investigations = _sandboxed(expire_investigations)
 
 JOBS = {
     job.__name__: job
@@ -116,6 +122,7 @@ JOBS = {
         health_checks,
         deliver_notifications,
         expire_chat_replies,
+        expire_investigations,
         prune,
         refresh_demo,
     )
@@ -132,5 +139,6 @@ def periodic_jobs() -> dict[str, int]:
         "health_checks": max(30, settings.health_interval_seconds),
         "deliver_notifications": 15,
         "expire_chat_replies": 60,
+        "expire_investigations": 60,
         "prune": 3600,
     }
