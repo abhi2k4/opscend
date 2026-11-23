@@ -46,8 +46,8 @@ from .scenarios import (
 
 REPO = "acme/storefront"
 # The public demo is only rebuilt after this long without a visitor doing anything.
-QUIET_BEFORE_REFRESH = timedelta(minutes=10)
-MAX_EVENTS_BEFORE_REFRESH = 4000
+# Seeded integrations are dated as if connected this long ago.
+SEEDED_AGO = timedelta(days=3)
 ACCOUNTS = {"vercel": "acme", "railway": "acme", "github": "acme-bot"}
 
 
@@ -207,34 +207,33 @@ async def rebuild_demo(session: AsyncSession) -> None:
 
 
 async def refresh_public_demo() -> bool:
-    """Job: rebuild the public demo's sample data once it has gone quiet.
+    """Job: keep the public demo tidy. Returns True when the shared data was rebuilt.
 
-    The sample deploys are dated relative to when they were seeded, so they go stale,
-    and visitors leave broken deploys and muted services behind. A rebuild waits for a
-    quiet spell so nobody loses the incident they are looking at.
+    Idle visitors' sandboxes are deleted. The shared sample data, which every new
+    sandbox is cloned from, is rebuilt when it is old: its deploys are dated relative
+    to when they were seeded, so they go stale. Nobody can change the shared data, so
+    there is nothing to lose by rebuilding it.
     """
+    from app.demo import sandbox
+
     settings = get_settings()
-    if not settings.public_demo or settings.public_demo_refresh_minutes <= 0:
+    if not settings.public_demo:
         return False
-    now = utcnow()
-    async with session_scope() as session:
+    await sandbox.sweep()
+    async with session_scope(shared=True) as session:
         seeded = await session.scalar(
-            select(func.max(Integration.last_synced_at)).where(Integration.is_demo.is_(True))
+            select(func.max(Integration.created_at)).where(Integration.is_demo.is_(True))
         )
-        if seeded is None or not await public_demo_is_clean(session):
-            await rebuild_demo(session)
-            return True
-        if now - seeded < timedelta(minutes=settings.public_demo_refresh_minutes):
-            return False
-        latest = [
-            await session.scalar(select(func.max(column)))
-            for column in (RawEvent.received_at, Investigation.created_at, ChatSession.updated_at)
-        ]
-        busy = any(at and now - at < QUIET_BEFORE_REFRESH for at in latest)
-        events = await session.scalar(select(func.count(RawEvent.id))) or 0
-        # Never-ending traffic must not keep stale or bloated data alive for good.
-        overdue = now - seeded > 6 * timedelta(minutes=settings.public_demo_refresh_minutes)
-        if busy and not overdue and events < MAX_EVENTS_BEFORE_REFRESH:
+        fresh = (
+            seeded is not None
+            and await public_demo_is_clean(session)
+            and (
+                settings.public_demo_refresh_minutes <= 0
+                or utcnow() - (seeded + SEEDED_AGO)
+                < timedelta(minutes=settings.public_demo_refresh_minutes)
+            )
+        )
+        if fresh:
             return False
         await rebuild_demo(session)
         return True
@@ -258,7 +257,7 @@ async def seed_demo(session: AsyncSession) -> None:
             status="connected",
             is_demo=True,
             last_synced_at=now,
-            created_at=now - timedelta(days=3),
+            created_at=now - SEEDED_AGO,
         )
         session.add(integration)
         await session.flush()
@@ -272,7 +271,7 @@ async def seed_demo(session: AsyncSession) -> None:
                     repo=REPO,
                     health_url=spec.health_url,
                     meta={"project_id": "c1f0a6de-2b7c-4d3e-9f18-6e5a4b3c2d10"},
-                    created_at=now - timedelta(days=3),
+                    created_at=now - SEEDED_AGO,
                 )
                 session.add(services[spec.key])
     await session.flush()

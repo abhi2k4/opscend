@@ -102,3 +102,17 @@ class Incident(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     service: Mapped[Service] = relationship(lazy="joined")
+
+
+class DemoSandbox(Base):
+    """One visitor's private copy of the sample data in the public demo.
+
+    Lives in the main database only; `id` names the schema (Postgres) or file (SQLite).
+    """
+
+    __tablename__ = "demo_sandbox"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)

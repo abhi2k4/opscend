@@ -9,12 +9,13 @@ from sqlalchemy import select, update
 
 from app import __version__
 from app.core.config import get_settings
-from app.core.db import get_engine, run_migrations, session_scope
+from app.core.db import dispose_all, run_migrations, session_scope
 from app.core.logging import configure_logging
 from app.core.public_demo import tag_visitor
 from app.core.queue import init_queue
 from app.core.security import hash_password, verify_password
 from app.core.time import utcnow
+from app.demo import sandbox
 from app.demo.seed import demo_exists, public_demo_is_clean, rebuild_demo, seed_demo
 from app.jobs import JOBS, periodic_jobs
 from app.models import ChatMessage, Investigation, User
@@ -72,6 +73,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if settings.demo:
         async with session_scope() as session:
             if settings.public_demo:
+                await sandbox.drop_all()
                 if not await public_demo_is_clean(session):
                     await rebuild_demo(session)
                     log.info("rebuilt the public demo's sample data")
@@ -92,7 +94,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     )
     yield
     await queue.stop()
-    await get_engine().dispose()
+    await dispose_all()
 
 
 app = FastAPI(

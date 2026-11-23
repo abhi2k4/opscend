@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 from app.core.config import get_settings
+from app.core.db import current_sandbox
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +40,8 @@ class InlineQueue:
         self._loops: list[asyncio.Task[None]] = []
 
     async def enqueue(self, name: str, *args: Any) -> None:
+        # The task copies the current context, so a job enqueued from inside a demo
+        # sandbox runs in that sandbox.
         task = asyncio.create_task(self._run(name, *args), name=f"job:{name}")
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -88,7 +91,10 @@ class ArqQueue:
         self._pool = await create_pool(RedisSettings.from_dsn(self._redis_url))
 
     async def enqueue(self, name: str, *args: Any) -> None:
-        await self._pool.enqueue_job(name, *args)
+        # The worker is another process: tell it which demo sandbox the job belongs to.
+        sandbox = current_sandbox()
+        extra = {"sandbox": sandbox} if sandbox else {}
+        await self._pool.enqueue_job(name, *args, **extra)
 
     async def stop(self) -> None:
         if self._pool is not None:

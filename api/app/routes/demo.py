@@ -39,7 +39,7 @@ async def break_something(
     return schemas.DemoBreakResult(deployment_id=deployment_id, incident_id=incident_id)
 
 
-@router.post("/reset", dependencies=[Depends(paced("reset", 60, shared=True))])
+@router.post("/reset", dependencies=[Depends(paced("reset", 20))])
 async def reset(session: SessionDep) -> schemas.Ok:
     _require_demo()
     await rebuild_demo(session)

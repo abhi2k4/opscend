@@ -6,7 +6,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
-from app.core.db import get_engine
+from app.core.db import dispose_all
 from app.core.logging import configure_logging
 from app.jobs import (
     JOBS,
@@ -23,7 +23,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    await get_engine().dispose()
+    await dispose_all()
 
 
 class WorkerSettings:
