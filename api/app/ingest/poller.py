@@ -12,6 +12,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.time import utcnow
 from app.integrations.base import (
@@ -48,6 +49,8 @@ async def sync_integration(integration_id: str, backfill: list[str] | None = Non
         integration = await session.get(Integration, integration_id)
         if integration is None:
             return
+        if get_settings().public_demo and not integration.is_demo:
+            return  # the public demo never calls a provider
         if integration.is_demo:
             integration.last_synced_at = utcnow()
             await session.commit()

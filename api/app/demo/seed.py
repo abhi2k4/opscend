@@ -170,15 +170,34 @@ async def demo_exists(session: AsyncSession) -> bool:
     return await session.scalar(select(Integration.id).limit(1)) is not None
 
 
+async def public_demo_is_clean(session: AsyncSession) -> bool:
+    """True when the public demo holds its sample data and nothing else.
+
+    A database that was used as a real install before OPSCEND_PUBLIC_DEMO was set still
+    has its connected accounts. They must not be shown to guests, or polled.
+    """
+    real = await session.scalar(
+        select(Integration.id).where(Integration.is_demo.is_(False)).limit(1)
+    )
+    sample = await session.scalar(
+        select(Integration.id).where(Integration.is_demo.is_(True)).limit(1)
+    )
+    return real is None and sample is not None
+
+
 async def wipe_demo(session: AsyncSession) -> None:
     """Delete all demo data. Services, deploys, logs, incidents and investigations cascade."""
-    await session.execute(delete(Integration).where(Integration.is_demo.is_(True)))
-    for model in (Commit, CommitDiff, RawEvent):
-        await session.execute(delete(model).where(model.is_demo.is_(True)))
     if get_settings().public_demo:
-        # Everything there is sample data or a visitor's leftovers: start clean.
+        # Nothing there may outlive a rebuild: sample data, visitors' leftovers, and any
+        # real account connected before the instance became a public demo.
+        for model in (Integration, Commit, CommitDiff, RawEvent):
+            await session.execute(delete(model))
         for model in (ChatSession, Notification, Investigation):
             await session.execute(delete(model))
+    else:
+        await session.execute(delete(Integration).where(Integration.is_demo.is_(True)))
+        for model in (Commit, CommitDiff, RawEvent):
+            await session.execute(delete(model).where(model.is_demo.is_(True)))
     await session.commit()
 
 
@@ -202,8 +221,8 @@ async def refresh_public_demo() -> bool:
         seeded = await session.scalar(
             select(func.max(Integration.last_synced_at)).where(Integration.is_demo.is_(True))
         )
-        if seeded is None:
-            await seed_demo(session)
+        if seeded is None or not await public_demo_is_clean(session):
+            await rebuild_demo(session)
             return True
         if now - seeded < timedelta(minutes=settings.public_demo_refresh_minutes):
             return False

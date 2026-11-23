@@ -8,9 +8,10 @@ from sqlalchemy import select
 
 from app.core import public_demo
 from app.core.db import session_scope
+from app.core.time import utcnow
 from app.demo import seed
 from app.models import Commit, CommitDiff, Deployment, Integration, Investigation, RawEvent
-from tests.conftest import ADMIN, _clear_caches, drain_jobs, running_app
+from tests.conftest import ADMIN, _clear_caches, drain_jobs, make_service, running_app
 
 SCENARIOS = ["bad-env-var", "syntax-error", "failing-migration", "dependency-bump", "timeout"]
 
@@ -232,3 +233,33 @@ async def test_the_simulation_is_off_unless_asked_for(demo_client):
     deployment = (await demo_client.get("/api/deployments?status=failed")).json()[0]
     started = await demo_client.post(f"/api/deployments/{deployment['id']}/investigate")
     assert started.status_code == 409  # no key, no simulation: the usual hint
+
+
+async def test_accounts_connected_before_it_went_public_are_removed(env):
+    """A real install switched to OPSCEND_PUBLIC_DEMO must not show its data to guests."""
+    # A normal install, demo off, with a real connection.
+    async with running_app(), session_scope() as session:
+        await make_service(session, name="my-real-app")
+        session.add(
+            Commit(
+                repo="me/private",
+                sha="a" * 40,
+                message="secret work",
+                author="me",
+                committed_at=utcnow(),
+            )
+        )
+        await session.commit()
+
+    env.setenv("OPSCEND_PUBLIC_DEMO", "1")
+    _clear_caches()
+    public_demo._last.clear()
+    async with running_app() as client:
+        integrations = (await client.get("/api/integrations")).json()
+        assert integrations and all(i["is_demo"] for i in integrations)
+        names = [s["name"] for s in (await client.get("/api/services?scope=all")).json()]
+        assert len(names) == 3 and "my-real-app" not in names
+        async with session_scope() as session:
+            assert await session.scalar(select(Commit).where(Commit.repo == "me/private")) is None
+        broke = await client.post("/api/demo/break", json={"scenario_id": "bad-env-var"})
+        assert broke.status_code == 200, broke.text
