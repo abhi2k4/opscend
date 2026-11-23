@@ -15,7 +15,7 @@ from app.core.public_demo import tag_visitor
 from app.core.queue import init_queue
 from app.core.security import hash_password, verify_password
 from app.core.time import utcnow
-from app.demo.seed import demo_exists, seed_demo
+from app.demo.seed import demo_exists, public_demo_is_clean, rebuild_demo, seed_demo
 from app.jobs import JOBS, periodic_jobs
 from app.models import ChatMessage, Investigation, User
 from app.routes import api_router
@@ -71,7 +71,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await ensure_admin()
     if settings.demo:
         async with session_scope() as session:
-            if not await demo_exists(session):
+            if settings.public_demo:
+                if not await public_demo_is_clean(session):
+                    await rebuild_demo(session)
+                    log.info("rebuilt the public demo's sample data")
+            elif not await demo_exists(session):
                 await seed_demo(session)
                 log.info("seeded demo data")
     queue = init_queue(JOBS, periodic_jobs())
