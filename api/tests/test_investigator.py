@@ -15,8 +15,9 @@ from app.integrations.railway import API as RAILWAY_API
 from app.investigator.llm import LLMError, LLMResponse, ToolCall
 from app.investigator.orchestrator import run_investigation
 from app.investigator.report import REPORT_TOOL_NAME
+from app.investigator.service import NOT_PICKED_UP, expire_stale_investigations
 from app.investigator.tools import TOOL_SPECS, InvestigatorTools
-from app.models import CommitDiff, HealthCheck, Investigation
+from app.models import CommitDiff, HealthCheck, Investigation, InvestigationStep
 from app.services.logs import to_rows
 from tests.conftest import SECRET_TOKEN, make_deployment, make_service
 
@@ -482,3 +483,27 @@ async def test_a_finished_investigation_is_not_run_twice(database):
     again = FakeLLM(turn(report()))
     await run_investigation(ids["investigation"], again)
     assert again.requests == []
+
+
+async def test_lost_jobs_are_failed_so_the_deploy_can_be_investigated_again(database):
+    async with session_scope() as session:
+        fresh = Investigation(model="fake-model")
+        lost = Investigation(model="fake-model", created_at=utcnow() - timedelta(minutes=11))
+        stuck = Investigation(
+            model="fake-model", status="running", created_at=utcnow() - timedelta(minutes=7)
+        )
+        session.add_all([fresh, lost, stuck])
+        await session.flush()
+        step = InvestigationStep(investigation_id=stuck.id, index=0, type="llm", name="m")
+        session.add(step)
+        await session.commit()
+        ids = fresh.id, lost.id, stuck.id, step.id
+
+    assert await expire_stale_investigations() == 2
+    assert (await result(ids[0])).status == "queued"
+    assert (await result(ids[1])).status == "failed" and (
+        await result(ids[1])
+    ).error == NOT_PICKED_UP
+    assert (await result(ids[2])).status == "failed"
+    async with session_scope() as session:
+        assert (await session.get(InvestigationStep, ids[3])).status == "error"

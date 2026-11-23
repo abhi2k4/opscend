@@ -4,17 +4,28 @@ import logging
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.service import RUNNING_TIMEOUT, job_timeout
 from app.core.config import get_settings
+from app.core.db import session_scope
 from app.core.queue import get_queue
 from app.core.time import utcnow
-from app.models import Deployment, Incident, Investigation
+from app.models import Deployment, Incident, Investigation, InvestigationStep
 
 log = logging.getLogger(__name__)
 
 NOT_CONFIGURED = "The AI investigator is not configured. {hint}, then restart the API."
+# A queued investigation no worker has started after this long was dropped (worker down,
+# or on an older version). Investigations can wait behind each other in the queue, so
+# this is longer than a chat reply's.
+QUEUED_TIMEOUT = timedelta(minutes=10)
+NOT_PICKED_UP = (
+    "No worker picked this investigation up. Check that the worker is running and on the "
+    "same version as the API (docker compose up -d --build worker), then run it again."
+)
+TIMED_OUT = "The investigation took too long and was stopped. Run it again."
 
 
 async def start_investigation(
@@ -87,3 +98,39 @@ async def auto_investigate(session: AsyncSession, incident: Incident) -> Investi
         log.info("auto-investigation skipped for %s: daily limit reached", incident.id)
         return None
     return await start_investigation(session, deployment=deployment, incident_id=incident.id)
+
+
+async def expire_stale_investigations() -> int:
+    """Job: fail investigations whose job was lost. Returns how many were failed.
+
+    A run left "queued" or "running" by a dead worker would block its deploy for good,
+    because `start_investigation` returns the active run instead of starting a new one.
+    """
+    now = utcnow()
+    running_timeout = max(RUNNING_TIMEOUT, job_timeout() + timedelta(minutes=1))
+    count = 0
+    async with session_scope() as session:
+        for status, timeout, error in (
+            ("queued", QUEUED_TIMEOUT, NOT_PICKED_UP),
+            ("running", running_timeout, TIMED_OUT),
+        ):
+            stale = select(Investigation.id).where(
+                Investigation.status == status, Investigation.created_at < now - timeout
+            )
+            # Steps first: they are found through the investigations' current status.
+            await session.execute(
+                update(InvestigationStep)
+                .where(
+                    InvestigationStep.investigation_id.in_(stale),
+                    InvestigationStep.status == "running",
+                )
+                .values(status="error", output_summary="interrupted")
+            )
+            result = await session.execute(
+                update(Investigation)
+                .where(Investigation.id.in_(stale))
+                .values(status="failed", error=error, finished_at=now)
+            )
+            count += result.rowcount or 0
+        await session.commit()
+    return count
