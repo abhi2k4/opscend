@@ -41,6 +41,11 @@ async def _served_models(base_url: str, key: str | None) -> list[str] | None:
         return None
 
 
+def is_served(model: str, served: list[str]) -> bool:
+    """Ollama lists `name:latest` for a model the API also accepts as plain `name`."""
+    return model in served or (":" not in model and f"{model}:latest" in served)
+
+
 async def run() -> int:
     settings = get_settings()
     if settings.ai_simulated:
@@ -59,7 +64,7 @@ async def run() -> int:
     served = await _served_models(settings.ai_base_url, settings.ai_key)
     if served is None:
         print("WARN  the endpoint did not list its models (GET /models); trying the model anyway")
-    elif settings.ai_model not in served:
+    elif not is_served(settings.ai_model, served):
         listed = ", ".join(served) or "(empty)"
         print(f"WARN  {settings.ai_model!r} is not in the server's model list: {listed}")
 
