@@ -4,8 +4,9 @@
 - Two consecutive failed health checks open an incident, if the service was ever healthy.
 - A failed deploy older than a day opens nothing: backfilled history is not an incident.
 - At most one incident is open per service; the rest is deduplicated.
-- A deploy incident resolves when a later deploy of the service is ready;
-  a health incident resolves on the next passing check.
+- A deploy incident resolves when a later deploy of the service is ready, which is
+  recorded as the deploy that resolved it; a health incident resolves on the next
+  passing check.
 """
 
 from datetime import timedelta
@@ -15,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utcnow
+from app.incidents import fingerprint, memory
 from app.models import Deployment, HealthCheck, Incident, Service
 from app.notifications import service as notifications
 
@@ -103,6 +105,9 @@ async def on_deployment(session: AsyncSession, deployment: Deployment) -> Incide
         if failed is None or (
             failed.id != deployment.id and failed.started_at <= deployment.started_at
         ):
+            incident.resolved_by_deployment_id = deployment.id
+            if failed is not None:
+                incident.fix_kind = await memory.classify_fix(session, failed, deployment)
             resolve(incident)
             notifications.incident_resolved(session, incident)
             await session.flush()
@@ -141,10 +146,15 @@ async def on_health_check(
     )
     if was_healthy is None:
         return None
-    return await _open(
+    incident = await _open(
         session,
         service,
         trigger=HEALTH_FAILED,
         dedup_key=f"health:{check.id}",
         title=f"{service.name} is failing health checks",
     )
+    if incident is not None:  # no logs to read: the failing check is the fingerprint
+        found = fingerprint.from_health_check(service.id, check.status_code)
+        incident.signature, incident.family = found.signature, found.family
+        incident.error_text = found.error_text
+    return incident
