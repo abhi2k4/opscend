@@ -271,6 +271,24 @@ To host one: set `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_SECRET_KEY` and `OPSCEND_COOK
 
 </details>
 
+## Backups and upgrades
+
+Everything Opscend knows lives in Postgres (the `pgdata` volume). Redis only holds jobs in flight: stored webhook events that were never processed are picked up again by the poller, so Redis needs no backup.
+
+```bash
+# back up
+docker compose exec -T postgres pg_dump -U opscend -d opscend -Fc > opscend.dump
+
+# restore (stop the app first so nothing writes during the restore)
+docker compose stop api worker
+docker compose exec -T postgres pg_restore -U opscend -d opscend --clean --if-exists < opscend.dump
+docker compose start api worker
+```
+
+Keep `OPSCEND_SECRET_KEY` with the backup: provider tokens and webhook secrets are encrypted with it, and a restore with a different key cannot read them (you would reconnect every integration).
+
+To upgrade, take a backup, then `git pull && docker compose up -d --build`. The API applies database migrations when it starts (`OPSCEND_AUTO_MIGRATE=1`).
+
 ## Development
 
 ```bash
