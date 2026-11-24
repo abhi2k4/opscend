@@ -1,4 +1,4 @@
-"""Webhook intake end to end: verify → raw event → job → deployment → incident."""
+"""Webhook intake end to end: verify â†’ raw event â†’ job â†’ deployment â†’ incident."""
 
 import hashlib
 import hmac
@@ -10,6 +10,7 @@ import respx
 from sqlalchemy import func, select
 
 from app.core.db import session_scope
+from app.core.queue import get_queue
 from app.models import Commit, Deployment, Incident, Integration, RawEvent, Service
 from tests.conftest import FIXTURES, SECRET_TOKEN, drain_jobs, load_fixture, make_service
 
@@ -59,8 +60,17 @@ async def test_same_webhook_twice_makes_one_event_one_deployment_one_incident(an
     assert inspector[0]["payload"]["type"] == "deployment.error"
 
 
-async def test_webhook_handler_does_not_normalize_inline(anon_client):
+async def test_webhook_handler_does_not_normalize_inline(anon_client, monkeypatch):
     """The handler only stores and enqueues; the deployment appears once the job has run."""
+    # Hold the job instead of letting the inline queue start it: otherwise it can finish
+    # before the assertions below and the test fails on timing alone.
+    queue = get_queue()
+    held = []
+
+    async def hold(name, *args):  # noqa: ANN001, ANN002
+        held.append((name, *args))
+
+    monkeypatch.setattr(queue, "enqueue", hold)
     async with session_scope() as session:
         await make_service(session)
     body, headers = vercel_delivery()
@@ -68,6 +78,9 @@ async def test_webhook_handler_does_not_normalize_inline(anon_client):
     assert response.status_code == 202
     assert await count(RawEvent) == 1
     assert await count(Deployment) == 0
+    [(name, *args)] = held
+    assert name == "process_event"
+    await type(queue).enqueue(queue, name, *args)
     await drain_jobs()
     assert await count(Deployment) == 1
 

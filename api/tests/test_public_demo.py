@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core import db, public_demo, security
+from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.time import utcnow
 from app.demo import sandbox, seed
@@ -279,7 +280,9 @@ async def test_idle_and_surplus_sandboxes_are_deleted(public, env):
     assert len(first) == 1 and (folder / f"{first[0]}.db").exists()
 
     env.setenv("OPSCEND_PUBLIC_DEMO_MAX_SESSIONS", "1")
-    _clear_caches()
+    # Reload the settings only. Clearing the engine caches too would orphan the first
+    # sandbox's open SQLite connection, and Windows refuses to delete an open file.
+    get_settings.cache_clear()
     async with other_visitor(public) as other:
         assert (await other.get("/api/overview")).status_code == 200
         second = await sandboxes()
