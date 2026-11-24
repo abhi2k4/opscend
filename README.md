@@ -68,6 +68,21 @@ Developer conveniences: `⌘K` command palette (type a question to send it to As
 - The report must cite log lines, commits or deploys it actually saw. A report with no verified evidence is marked inconclusive, and one that cites only a commit (never the failure itself) is capped at low confidence.
 - Log text is passed as untrusted data. Provider tokens never enter the model context.
 
+### Measuring accuracy
+
+`make eval` runs the investigator on 13 failures whose cause is known and scores each report. Use it before trusting a new model, and after changing the prompt, the tools or the evidence check.
+
+```bash
+make eval                                  # every case, once, with the configured model
+make eval ARGS="--case timeout --runs 3"   # one case, three times
+make eval ARGS="--min-accuracy 0.8"        # exit 1 below 80%
+```
+
+- **The cases** (`api/app/evals/cases.py`): nine where the deploy's commit is the cause, three where it is innocent (a registry outage, a build out of memory, a rotated database password), and one with no runtime logs, where the only right answer is "inconclusive". Two of them carry traps: an error that recovered by itself, and a log line that gives the model instructions.
+- **The score:** a report is correct when it states the cause, names the right commit (or no commit), and cites a log line that shows the failure. The checks are string and id comparisons, not a second model, so a report always scores the same.
+- **The outcomes:** `correct`, `abstained` (said inconclusive when the cause was in the logs), `wrong`, and `confidently wrong` (wrong at medium or high confidence), which is the one to drive to zero.
+- It works in a throwaway SQLite database and never touches your data. It does spend tokens: about 10,000 per case.
+
 ### Self-hosted models
 
 To keep logs and diffs on your own hardware, point Opscend at a local model server instead of Groq. No key is needed.
@@ -169,6 +184,8 @@ make test      # pytest, no live API calls
 make lint
 make check     # API lint and tests
 make check-web # web type-check
+make check-ai  # can the configured model call tools?
+make eval      # how often does the investigator name the right cause?
 ```
 
 ## Status
