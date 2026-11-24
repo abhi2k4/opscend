@@ -1,4 +1,4 @@
-"""Webhook intake end to end: verify â†’ raw event â†’ job â†’ deployment â†’ incident."""
+"""Webhook intake end to end: verify → raw event → job → deployment → incident."""
 
 import hashlib
 import hmac
