@@ -3,13 +3,14 @@
 from datetime import timedelta
 
 import httpx
+import pytest
 import respx
 from sqlalchemy import select
 
 from app.core.db import session_scope
 from app.core.time import utcnow
-from app.incidents import rules
-from app.incidents.health import run_health_checks
+from app.incidents import health, rules
+from app.incidents.health import probe, run_health_checks
 from app.ingest.normalizer import apply_batch
 from app.integrations.base import DeploymentIn, NormalizedBatch
 from app.models import Deployment, HealthCheck, Incident, Investigation
@@ -271,3 +272,61 @@ async def test_automatic_investigation_stops_at_the_daily_limit(database, env):
         await drain_jobs()
         assert len(await incidents(session)) == 2
         assert len(await _investigations(session)) == 1
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data/",  # AWS, GCP, Azure metadata
+        "http://[fd00:ec2::254]/latest/meta-data/",  # AWS over IPv6
+        "http://100.100.100.200/latest/meta-data/",  # Alibaba
+        "http://[::ffff:169.254.169.254]/",  # the same address, IPv4-mapped
+        "http://0.0.0.0:8000/health",
+    ],
+)
+@respx.mock
+async def test_health_check_never_reaches_the_metadata_service(url):
+    route = respx.route().respond(200)
+    async with httpx.AsyncClient() as http:
+        assert await probe(http, url) == (None, None, False)
+    assert not route.called  # refused before any request is sent
+
+
+@respx.mock
+async def test_a_hostname_resolving_to_the_metadata_service_is_refused(monkeypatch):
+    async def resolve(host: str) -> list[str]:
+        return ["169.254.169.254"]
+
+    monkeypatch.setattr(health, "resolve", resolve)
+    route = respx.route().respond(200)
+    async with httpx.AsyncClient() as http:
+        assert await probe(http, "http://metadata.example.test/") == (None, None, False)
+    assert not route.called
+
+
+@respx.mock
+async def test_a_redirect_to_the_metadata_service_is_not_followed():
+    respx.get("https://shop.example.test/health").respond(
+        302, headers={"Location": "http://169.254.169.254/latest/meta-data/"}
+    )
+    metadata = respx.get("http://169.254.169.254/latest/meta-data/").respond(200)
+    async with httpx.AsyncClient() as http:
+        assert await probe(http, "https://shop.example.test/health") == (None, None, False)
+    assert not metadata.called
+
+
+@respx.mock
+async def test_redirects_and_private_addresses_still_work():
+    """A self-hosted install checks services on its own network, often via a redirect."""
+    respx.get("http://10.0.0.5/health").respond(301, headers={"Location": "http://127.0.0.1/ok"})
+    respx.get("http://127.0.0.1/ok").respond(200)
+    async with httpx.AsyncClient() as http:
+        status, latency, ok = await probe(http, "http://10.0.0.5/health")
+    assert (status, ok) == (200, True) and latency is not None
+
+
+@respx.mock
+async def test_endless_redirects_count_as_down():
+    respx.get("https://loop.example.test/").respond(302, headers={"Location": "/"})
+    async with httpx.AsyncClient() as http:
+        assert await probe(http, "https://loop.example.test/") == (None, None, False)
