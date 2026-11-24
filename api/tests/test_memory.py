@@ -12,6 +12,7 @@ from app.core.config import API_DIR
 from app.core.db import session_scope
 from app.core.time import utcnow
 from app.demo.scenarios import SCENARIOS_BY_ID, STRIPE_ENV
+from app.evals.memory import evaluate
 from app.incidents import fingerprint, memory, rules
 from app.integrations.base import LogLineIn
 from app.models import Incident
@@ -195,3 +196,11 @@ async def test_the_migration_finds_what_resolved_older_incidents(database):
         incident = await session.get(Incident, incident.id)
         assert incident.resolved_by_deployment_id == fix.id
         assert incident.signature is None  # fingerprints need logs: the job does those
+
+
+def test_memory_recognises_repeats_and_nothing_else():
+    """The `make eval-memory` set: every repeat found first, no novel error "seen before"."""
+    report = evaluate()
+    assert (report.hit_at_1, report.false_seen_before) == (1.0, 0.0), [
+        row for row in report.rows if row[1] != "ok"
+    ]

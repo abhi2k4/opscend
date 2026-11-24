@@ -27,10 +27,10 @@ log = logging.getLogger(__name__)
 
 LOOKBACK = timedelta(days=180)
 MAX_CANDIDATES = 500
-# Below this word overlap of the headlines, two errors are different errors. The demo's
-# CACHE_URL and STRIPE_WEBHOOK_SECRET headlines overlap by 0.71, its unrelated ones by
-# less than 0.15.
-MIN_TEXT_SIMILARITY = 0.5
+# Below this word overlap of the headlines, two errors are different errors. Set from
+# `make eval-memory`: real repeats overlap by 0.75 or more, while near misses such as
+# 'column "x" does not exist' vs 'relation "y" does not exist' reach 0.5.
+MIN_TEXT_SIMILARITY = 0.6
 # How many incidents without a fingerprint one run of the job looks at, and for how
 # long it keeps trying (a provider that is down must not be asked forever).
 BATCH = 20

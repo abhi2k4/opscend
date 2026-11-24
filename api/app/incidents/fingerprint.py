@@ -24,6 +24,13 @@ from dataclasses import dataclass
 VERSION = "v1"
 MAX_ERROR_TEXT = 500
 
+# Some platforms put their own timestamp and level in the message text:
+# "2026-11-24T10:00:01.123Z ERROR Error: ...". That prefix is not part of the error.
+_PREFIX = re.compile(
+    r"^\s*\[?\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?\]?\s+"
+    r"(?:\[?(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\]?:?\s+)?",
+    re.IGNORECASE,
+)
 # Lines that carry no message of their own: stack frames, code frames, carets, bare
 # file locations, runtime banners and lone braces.
 _NOISE = re.compile(
@@ -114,9 +121,14 @@ def _score(message: str) -> int:
     return sum(points for pattern, points in _SCORES if pattern.search(message))
 
 
+def _clean(lines: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
+    cleaned = [(level, _PREFIX.sub("", message).strip()) for level, message in lines]
+    return [(level, message) for level, message in cleaned if message]
+
+
 def headline(lines: Iterable[tuple[str, str]]) -> str | None:
     """The line that names the failure, from `(level, message)` pairs in log order."""
-    lines = [(level, message.strip()) for level, message in lines if message.strip()]
+    lines = _clean(lines)
     # Error lines, else warnings, else the last few lines of a log that has no levels.
     pool = (
         [m for level, m in lines if level == "error"]
@@ -132,14 +144,14 @@ def headline(lines: Iterable[tuple[str, str]]) -> str | None:
 
 def from_logs(lines: Iterable[tuple[str, str]]) -> Fingerprint | None:
     """Fingerprint a failed deploy from its log lines. None when they say nothing."""
-    lines = list(lines)
+    lines = _clean(lines)
     top = headline(lines)
     if top is None:
         return None
     masked = _mask(top)
     others = []
     for level, message in lines:
-        if level == "error" and not _NOISE.match(message.strip()):
+        if level == "error" and not _NOISE.match(message):
             line = _mask(message).lower()
             if line != masked.lower() and line not in others:
                 others.append(line)
