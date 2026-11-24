@@ -1,10 +1,84 @@
+<div align="center">
+
+<img src="web/public/sherlog.svg" alt="Sherlog, the Opscend mascot" width="96" />
+
 # Opscend
 
-[![CI](https://github.com/abhi2k4/opscend/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi2k4/opscend/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+**Know why the deploy broke.**
 
-**Know why the deploy broke.** Opscend is an open-source, self-hosted tool that puts every deploy (Vercel, Railway, Render, Fly.io, Netlify, Cloudflare Pages, AWS) and every GitHub commit on one timeline, opens an incident when something fails, and runs a read-only AI investigator that reads the logs and the diff and names the likely cause — citing its evidence.
+One timeline for every deploy and commit, an incident when something fails,<br />
+and a read-only AI investigator that names the likely cause and cites its evidence.
 
-> Single user, self-hosted. Bring your own LLM key, or run the model yourself. The investigator has no write tools.
+[![CI](https://github.com/abhi2k4/opscend/actions/workflows/ci.yml/badge.svg)](https://github.com/abhi2k4/opscend/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.13](https://img.shields.io/badge/python-3.13-3776ab.svg)
+![Next.js 16](https://img.shields.io/badge/next.js-16-black.svg)
+![Self-hosted](https://img.shields.io/badge/self--hosted-yes-5f7f5f.svg)
+
+[**Live demo**](https://opscend.abhishekthormothe.in) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Providers](#providers) · [Self-hosted models](#self-hosted-models)
+
+<br />
+
+<a href="https://opscend.abhishekthormothe.in">
+  <img src="docs/screenshots/investigation.png" alt="An investigation: the trace of every model turn and tool call next to the cited report" width="920" />
+</a>
+
+</div>
+
+<br />
+
+> Open source, self-hosted, single user. Bring your own LLM key or run the model yourself. The investigator has no write tools.
+
+## Why Opscend
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### One timeline
+
+Deploys from Vercel, Railway, Render, Fly.io, Netlify, Cloudflare Pages and AWS, next to the GitHub commits that caused them.
+
+</td>
+<td width="33%" valign="top">
+
+### A cause, with proof
+
+A failed deploy is investigated as soon as its incident opens. Every log line, commit and deploy the report cites is checked against what the tools returned.
+
+</td>
+<td width="33%" valign="top">
+
+### Yours to run
+
+Read-only by design. Runs on Groq, or on a model you host, so logs and diffs never have to leave your network.
+
+</td>
+</tr>
+</table>
+
+## A look around
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/overview.png" alt="Overview: service health, open incidents and latest deploys" /></td>
+<td width="50%"><img src="docs/screenshots/timeline.png" alt="Timeline: deploys, commits and incidents from all providers" /></td>
+</tr>
+<tr>
+<td align="center"><b>Overview</b><br />Service health, open incidents, latest deploys</td>
+<td align="center"><b>Timeline</b><br />Every provider and every commit on one rail</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/investigation.png" alt="Investigation: live trace and cited report" /></td>
+<td width="50%"><img src="docs/screenshots/ask.png" alt="Ask Opscend: an answer with citations and a chart" /></td>
+</tr>
+<tr>
+<td align="center"><b>Investigation</b><br />Live trace of each step, next to the cited report</td>
+<td align="center"><b>Ask Opscend</b><br />Answers with citations and charts computed from your data</td>
+</tr>
+</table>
+
+Screenshots are from the [live demo](https://opscend.abhishekthormothe.in), which runs on sample data with a scripted model.
 
 ## Quick start
 
@@ -29,35 +103,36 @@ make dev-web                # Next.js on :3000  (needs pnpm)
 
 Demo mode (`OPSCEND_DEMO=1`, the default) seeds a sample storefront with a failed Railway deploy so every screen has data before you connect anything. The **Tour** button in the console walks through it (it needs `GROQ_API_KEY`, or `OPSCEND_AI_SIMULATED=1` to script the model's part).
 
-## The public demo
+## How it works
 
-The hosted demo is this same app with `OPSCEND_PUBLIC_DEMO=1`. It is a showcase, not a place to connect anything:
+```mermaid
+flowchart LR
+    subgraph Sources
+        P["Vercel · Railway · Netlify<br/>webhooks"]
+        Q["Render · Fly.io · Cloudflare · AWS<br/>polled every 60s"]
+        G["GitHub<br/>commits and diffs"]
+    end
+    P --> I["Verify signature<br/>store raw event<br/>enqueue"]
+    Q --> I
+    G --> I
+    I --> W["Worker<br/>idempotent jobs"]
+    W --> D[("Postgres")]
+    W -- "deploy failed" --> N["Incident"]
+    N --> A["Investigator<br/>read-only tools"]
+    A <--> M["Groq or<br/>self-hosted model"]
+    A --> D
+    D --> C["Console<br/>Next.js"]
+```
 
-- **No login, and a private copy each.** Every visitor is a guest working in their own copy of the sample data (a Postgres schema or SQLite file per browser, `api/app/demo/sandbox.py`). Breaking a deploy, muting a service, asking a question or pressing Reset changes nothing for anyone else.
-- **Nothing real is reachable.** Connecting, testing, syncing and deleting integrations, inbound webhooks, health-URL edits and test emails all answer 403 with a pointer to the quick start. No provider is ever called.
-- **The model is simulated.** Investigations and Ask Opscend run the real read-only tools and the real evidence check, but the steps and conclusions come from a script (`api/app/demo/simulated.py`) that knows the scripted failures and a fixed set of questions. It uses no key, and the UI labels every run as simulated.
-- **It cleans up after itself.** Actions are paced per visitor. A visitor's copy is deleted after `OPSCEND_PUBLIC_DEMO_SESSION_MINUTES` idle (default 120), at most `OPSCEND_PUBLIC_DEMO_MAX_SESSIONS` exist at once (default 300), and all of them are dropped when the API restarts. Setting `OPSCEND_PUBLIC_DEMO=1` on a database that was a real install deletes its connected accounts and their history.
-- **A guided tour** starts on the first visit: break a deploy, see the incident open, read the report, look at what changed, ask a question.
+Webhook handlers verify the signature, store the raw event under a dedup key, and enqueue. All real work happens in the worker, idempotently, so a slow provider or a duplicate delivery never breaks ingestion.
 
-To host one: set `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_SECRET_KEY` and `OPSCEND_COOKIE_SECURE=1` on the API, and build the web app with `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_LANDING_ONLY=0` and `OPSCEND_API_URL` pointing at the API. To try Opscend on your own deploys, with a real model, use the quick start above instead.
+```
+api/   FastAPI · SQLAlchemy 2 · Alembic · arq
+web/   Next.js App Router · Tailwind v4 · Motion
+docs/  plan, provider guide
+```
 
-## What is in the box
-
-| Screen | Route | What it does |
-| --- | --- | --- |
-| Landing | `/` | Pitch, animated demo, quick start |
-| Overview | `/console` | Service health, open incidents, latest deploys |
-| Ask Opscend | `/console/ask` | Chat with your deploy data: answers cite the deploys, log lines and commits they come from |
-| Timeline | `/console/timeline` | Deploys, commits and incidents from all providers on one rail |
-| Deploy detail | `/console/deployments/:id` | Build and runtime logs with level filters, commit diff, Investigate, and **What changed**: the commits, files and build time that separate this deploy from the last one that went live |
-| Investigation | `/console/investigations/:id` | Live trace of every model turn and tool call, next to the cited report. Mark each report right or wrong; the list page counts the verdicts |
-| Incidents | `/console/incidents` | Auto-opened on failed deploys and failed health checks |
-| Notifications | `/console/notifications` | Bell in the top bar, full history, email alert status and a test button |
-| Integrations | `/console/integrations` | Paste a token, test it, see the provider's capabilities |
-| Event inspector | `/console/events` | Every raw webhook and poll result, with dedup state |
-| Chaos lab | `/console/chaos` | Five scripted failures pushed through the real ingest pipeline |
-
-Developer conveniences: `⌘K` command palette (type a question to send it to Ask Opscend), `g` + letter navigation, click-to-copy ids and SHAs, and interactive API docs at `/api/docs`.
+`web/lib/types.ts` is the API contract; `api/app/schemas.py` mirrors it.
 
 ## The AI investigator
 
@@ -128,36 +203,6 @@ A chat assistant over everything Opscend has collected. Ask "which services had 
 
 Stored log lines and health checks older than `OPSCEND_RETENTION_DAYS` (default 30, `0` keeps everything) are deleted hourly.
 
-## Notifications and email alerts
-
-Opened and resolved incidents, finished investigations and integration errors show up under the bell in the console. To also receive them by email, set the `OPSCEND_SMTP_*` and `OPSCEND_EMAIL_*` variables in `.env` (any SMTP provider works) and restart the API and worker. `OPSCEND_EMAIL_EVENTS` chooses which events are emailed.
-
-To try it without a real mail account, start the bundled test inbox and point Opscend at it:
-
-```bash
-docker compose --profile mail up -d mailpit
-```
-
-Then set `OPSCEND_SMTP_HOST=mailpit`, `OPSCEND_SMTP_PORT=1025`, `OPSCEND_SMTP_SECURITY=none`, plus any from and to address, and read the mail at http://localhost:8025.
-
-## Architecture
-
-```
-Vercel ─┐                 ┌─ Postgres ── Console (Next.js)
-Railway ─┼─ webhooks ─┐    │
-GitHub ─┘   poller  ──┴─ worker ──────── Investigator (Groq, read-only tools)
-```
-
-Webhook handlers verify the signature, store the raw event under a dedup key, and enqueue. All real work happens in the worker, idempotently, so a slow provider or a duplicate delivery never breaks ingestion.
-
-```
-api/   FastAPI · SQLAlchemy 2 · Alembic · arq
-web/   Next.js App Router · Tailwind v4 · Motion
-docs/  plan, provider guide
-```
-
-`web/lib/types.ts` is the API contract; `api/app/schemas.py` mirrors it.
-
 ## Providers
 
 | Provider | Connect with | Deploys | Logs | Webhooks |
@@ -173,9 +218,58 @@ docs/  plan, provider guide
 
 "Polled" means Opscend checks every 60 seconds instead of receiving a webhook. For AWS, the IAM user needs `amplify:List*`, `amplify:GetJob`, `ecs:ListClusters`, `ecs:ListServices` and `ecs:DescribeServices`; temporary (session-token) credentials are not supported.
 
-## Adding a provider
+### Adding a provider
 
 A provider is one adapter file plus one registry line. See [docs/adding-a-provider.md](docs/adding-a-provider.md). The console reads the capability manifest from `/api/integrations/catalog`, so a new adapter shows up in Integrations without frontend changes.
+
+## Every screen
+
+| Screen | Route | What it does |
+| --- | --- | --- |
+| Landing | `/` | Pitch, animated demo, quick start |
+| Overview | `/console` | Service health, open incidents, latest deploys |
+| Ask Opscend | `/console/ask` | Chat with your deploy data: answers cite the deploys, log lines and commits they come from |
+| Timeline | `/console/timeline` | Deploys, commits and incidents from all providers on one rail |
+| Deploy detail | `/console/deployments/:id` | Build and runtime logs with level filters, commit diff, Investigate, and **What changed**: the commits, files and build time that separate this deploy from the last one that went live |
+| Investigation | `/console/investigations/:id` | Live trace of every model turn and tool call, next to the cited report. Mark each report right or wrong; the list page counts the verdicts |
+| Incidents | `/console/incidents` | Auto-opened on failed deploys and failed health checks |
+| Notifications | `/console/notifications` | Bell in the top bar, full history, email alert status and a test button |
+| Integrations | `/console/integrations` | Paste a token, test it, see the provider's capabilities |
+| Event inspector | `/console/events` | Every raw webhook and poll result, with dedup state |
+| Chaos lab | `/console/chaos` | Five scripted failures pushed through the real ingest pipeline |
+
+Developer conveniences: `⌘K` command palette (type a question to send it to Ask Opscend), `g` + letter navigation, click-to-copy ids and SHAs, and interactive API docs at `/api/docs`.
+
+## Notifications and email alerts
+
+Opened and resolved incidents, finished investigations and integration errors show up under the bell in the console. To also receive them by email, set the `OPSCEND_SMTP_*` and `OPSCEND_EMAIL_*` variables in `.env` (any SMTP provider works) and restart the API and worker. `OPSCEND_EMAIL_EVENTS` chooses which events are emailed.
+
+To try it without a real mail account, start the bundled test inbox and point Opscend at it:
+
+```bash
+docker compose --profile mail up -d mailpit
+```
+
+Then set `OPSCEND_SMTP_HOST=mailpit`, `OPSCEND_SMTP_PORT=1025`, `OPSCEND_SMTP_SECURITY=none`, plus any from and to address, and read the mail at http://localhost:8025.
+
+## The public demo
+
+The hosted demo is this same app with `OPSCEND_PUBLIC_DEMO=1`. It is a showcase, not a place to connect anything:
+
+- **No login, and a private copy each.** Every visitor is a guest working in their own copy of the sample data (a Postgres schema or SQLite file per browser, `api/app/demo/sandbox.py`). Breaking a deploy, muting a service, asking a question or pressing Reset changes nothing for anyone else.
+- **Nothing real is reachable.** Connecting, testing, syncing and deleting integrations, inbound webhooks, health-URL edits and test emails all answer 403 with a pointer to the quick start. No provider is ever called.
+- **The model is simulated.** Investigations and Ask Opscend run the real read-only tools and the real evidence check, but the steps and conclusions come from a script (`api/app/demo/simulated.py`) that knows the scripted failures and a fixed set of questions. It uses no key, and the UI labels every run as simulated.
+- **It cleans up after itself.** Actions are paced per visitor. A visitor's copy is deleted after `OPSCEND_PUBLIC_DEMO_SESSION_MINUTES` idle (default 120), at most `OPSCEND_PUBLIC_DEMO_MAX_SESSIONS` exist at once (default 300), and all of them are dropped when the API restarts. Setting `OPSCEND_PUBLIC_DEMO=1` on a database that was a real install deletes its connected accounts and their history.
+- **A guided tour** starts on the first visit: break a deploy, see the incident open, read the report, look at what changed, ask a question.
+
+<details>
+<summary><b>Hosting your own public demo</b></summary>
+
+<br />
+
+To host one: set `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_SECRET_KEY` and `OPSCEND_COOKIE_SECURE=1` on the API, and build the web app with `OPSCEND_PUBLIC_DEMO=1`, `OPSCEND_LANDING_ONLY=0` and `OPSCEND_API_URL` pointing at the API. To try Opscend on your own deploys, with a real model, use the quick start above instead.
+
+</details>
 
 ## Development
 
