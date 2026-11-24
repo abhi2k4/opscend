@@ -145,6 +145,7 @@ async def test_health_incident_needs_two_failures_and_resolves_when_healthy(data
             [incident] = await incidents(session)
             assert (incident.trigger, incident.status) == ("health_check_failed", "open")
             assert incident.deployment_id is None
+            assert incident.error_text == "health check failed: http 5xx"  # its fingerprint
 
         route.mock(side_effect=httpx.ConnectError("refused"))
         await run_health_checks(http)

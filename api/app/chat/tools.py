@@ -54,10 +54,8 @@ FINISHED_GOOD = "ready"
 
 @dataclass
 class ChatLedger(EvidenceLedger):
-    """The investigator's ledger plus the incidents and investigations shown."""
+    """The investigator's ledger plus the charts built this turn."""
 
-    incidents: set[str] = field(default_factory=set)
-    investigations: set[str] = field(default_factory=set)
     # Charts the tools built this turn, by id. Only these may appear in the answer.
     charts: dict[str, dict[str, Any]] = field(default_factory=dict)
 

@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import session_scope
+from app.core.queue import get_queue
 from app.core.time import utcnow
 from app.incidents import rules
 from app.integrations.base import CommitIn, DeploymentIn, NormalizedBatch
@@ -73,12 +74,17 @@ async def apply_batch(session: AsyncSession, provider: str, batch: NormalizedBat
             if incident is not None:
                 opened.append(incident)
     await session.commit()
-    # Only once the incident is stored: the investigation job reads it from the database.
+    # Only once the incident is stored: the jobs read it from the database.
     for incident in opened:
         try:
             await auto_investigate(session, incident)
         except Exception:  # an investigation that cannot start must not fail ingestion
             log.exception("could not start an automatic investigation for %s", incident.id)
+    if opened:
+        try:  # fingerprint the new incidents' errors (incidents/memory.py)
+            await get_queue().enqueue("remember_incidents")
+        except Exception:  # the periodic run picks them up later
+            log.exception("could not start remembering %d incidents", len(opened))
 
 
 async def _upsert_commit(session: AsyncSession, incoming: CommitIn) -> None:

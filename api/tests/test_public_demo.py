@@ -112,7 +112,21 @@ async def test_a_broken_deploy_is_investigated_by_the_script(public, scenario_id
     kinds = [item["type"] for item in report["evidence"]]
     assert kinds == ["log", "log", "log", "commit", "deploy"], kinds
     steps = [step["name"] for step in run["steps"] if step["type"] == "tool"]
-    assert steps == ["get_deployment", "get_logs", "get_logs", "get_commit_diff"]
+    assert steps == [
+        "find_similar_incidents",  # the memory step, before the model starts
+        "get_deployment",
+        "get_logs",
+        "get_logs",
+        "get_commit_diff",
+    ]
+    # Breaking bad-env-var while the seeded STRIPE_WEBHOOK_SECRET incident is on record:
+    # the same kind of error, which the report mentions and the API lists.
+    similar = (await public.get(f"/api/incidents/{incident['id']}/similar")).json()
+    if scenario_id == "bad-env-var":
+        assert similar[0]["match"] == "family"
+        assert "Opscend has seen the same kind of error" in report["likely_cause"]
+    else:
+        assert "Opscend has seen" not in report["likely_cause"]
 
 
 async def test_a_failure_the_script_does_not_know_is_reported_as_inconclusive(public):

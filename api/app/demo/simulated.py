@@ -174,7 +174,34 @@ def _investigate(messages: list[dict[str, Any]], *, forced: bool) -> LLMResponse
         deployment.group(1) if deployment else None,
         commit.group(1) if commit else None,
     )
+    if not report["inconclusive"]:
+        report["likely_cause"] += _seen_before(messages)
     return _respond("Enough evidence to report.", [(REPORT_TOOL, report)])
+
+
+PAST_INCIDENT = re.compile(r"^- incident_id \S+, (\S+), service ([^,]+), \w+, ([^:]+):", re.M)
+PAST_FIX = re.compile(r"resolved by deployment_id \S+ at commit (\w{7})\w*: ([^\n(]+)")
+
+
+def _seen_before(messages: list[dict[str, Any]]) -> str:
+    """One sentence on the closest earlier incident from Opscend memory, as a model would."""
+    memory = next(
+        (
+            str(m["content"])
+            for m in messages
+            if m["role"] == "user" and str(m["content"]).startswith("Opscend memory:")
+        ),
+        "",
+    )
+    past = PAST_INCIDENT.search(memory)
+    if past is None:
+        return ""
+    day, service, kind = past.groups()
+    sentence = f" Opscend has seen {kind} before, on {service} on {day}"
+    fix = PAST_FIX.search(memory[past.end() :].split("\n- ", 1)[0])
+    if fix:
+        sentence += f"; it was resolved by {fix.group(2).strip()} at {fix.group(1)}"
+    return sentence + "."
 
 
 def _report(

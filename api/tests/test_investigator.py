@@ -242,7 +242,7 @@ async def test_untrusted_data_is_wrapped_and_tokens_never_reach_the_model(databa
     assert SECRET_TOKEN not in everything
 
 
-async def test_tools_are_read_only_and_exactly_the_five(database):
+async def test_tools_are_read_only_and_exactly_the_six(database):
     names = {spec["function"]["name"] for spec in TOOL_SPECS}
     assert names == {
         "get_deployment",
@@ -250,6 +250,7 @@ async def test_tools_are_read_only_and_exactly_the_five(database):
         "list_recent_deploys",
         "get_commit_diff",
         "get_health_history",
+        "find_similar_incidents",
     }
     public = {name for name in vars(InvestigatorTools) if not name.startswith("_")}
     assert public == names | {"call"}

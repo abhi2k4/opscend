@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { InvestigateButton } from "@/components/console/deploys";
 import { ReportView, RunMeta, TraceView } from "@/components/console/investigation";
+import { SimilarIncidents } from "@/components/console/similar-incidents";
 import { ButtonLink, Dot, Empty, Mono, Panel, PanelHeader, Skeleton, Tag } from "@/components/ui/primitives";
 import { useApi } from "@/lib/api";
 import type { Investigation } from "@/lib/types";
@@ -75,6 +76,7 @@ export default function InvestigationPage() {
           <ReportView inv={inv} />
         </Panel>
       </div>
+      {inv.incident_id && <SimilarIncidents incidentId={inv.incident_id} />}
     </>
   );
 }

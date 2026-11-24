@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.core.time import utcnow
+from app.incidents import memory
 from app.models import Deployment, Incident, Investigation, InvestigationStep, Service
 from app.notifications import service as notifications
 from app.schemas import InvestigationReport
@@ -144,6 +145,7 @@ class _Run:
 
     async def execute(self) -> InvestigationReport:
         messages = await self._context()
+        await self._memory_step(messages)
         nudged = retried_llm = retried_report = False
         corrections = 0
 
@@ -207,6 +209,33 @@ class _Run:
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
         raise InvestigationFailed("the investigation ran out of turns")
+
+    async def _memory_step(self, messages: list[dict[str, Any]]) -> None:
+        """Show the model earlier incidents like this one before it starts.
+
+        It runs for every incident, so the model cannot skip it, and it does not count
+        against the tool budget. The result is a hint in the task, never evidence.
+        """
+        incident_id = self.investigation.incident_id
+        incident = await self.session.get(Incident, incident_id) if incident_id else None
+        if incident is None:
+            return
+        # Usually stored already by the remember_incidents job. In a session of its own,
+        # because memory is a bonus: a failure here must not touch this run's session.
+        try:
+            async with session_scope() as own:
+                if (fresh := await own.get(Incident, incident.id)) is not None:
+                    await memory.remember(own, fresh)
+        except Exception:
+            log.exception("could not fingerprint incident %s", incident.id)
+        await self.session.refresh(incident)
+        arguments = {"incident_id": incident.id}
+        step, started = await self._start_step("tool", "find_similar_incidents", arguments)
+        output = await self.tools.call("find_similar_incidents", arguments)
+        ok = not output.startswith("error:")
+        await self._finish_step(step, started, ok=ok, summary=_summarize(output))
+        if ok:
+            messages.append({"role": "user", "content": f"Opscend memory:\n{output}"})
 
     async def _tool_step(self, name: str, arguments: dict[str, Any]) -> str:
         self.tool_calls += 1

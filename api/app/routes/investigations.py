@@ -9,9 +9,10 @@ from app import models, schemas
 from app.core.config import get_settings
 from app.core.public_demo import paced
 from app.core.time import utcnow
-from app.incidents import rules
+from app.incidents import memory, rules
 from app.investigator.service import start_investigation
 from app.services.presenters import (
+    deployment_out,
     incident_out,
     investigation_out,
     monitored_service_ids,
@@ -95,6 +96,25 @@ async def list_incidents(
 @router.get("/incidents/{incident_id}")
 async def get_incident(incident_id: str, session: SessionDep) -> schemas.Incident:
     return await incident_out(session, await get_or_404(session, models.Incident, incident_id))
+
+
+@router.get("/incidents/{incident_id}/similar")
+async def similar_incidents(incident_id: str, session: SessionDep) -> list[schemas.SimilarIncident]:
+    """Earlier incidents with the same or a similar error, best match first."""
+    incident = await get_or_404(session, models.Incident, incident_id)
+    out = []
+    for match in await memory.similar(session, incident):
+        fix_id = match.incident.resolved_by_deployment_id
+        fix = await session.get(models.Deployment, fix_id) if fix_id else None
+        out.append(
+            schemas.SimilarIncident(
+                incident=await incident_out(session, match.incident),
+                match=match.kind,
+                score=match.score,
+                resolved_by=deployment_out(fix) if fix else None,
+            )
+        )
+    return out
 
 
 @router.post("/incidents/{incident_id}/resolve")

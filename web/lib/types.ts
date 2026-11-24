@@ -217,6 +217,21 @@ export interface Incident {
   investigation_id: string | null;
   opened_at: string;
   resolved_at: string | null;
+  /** Incidents with the same error in the last 180 days, this one included. */
+  times_seen: number;
+  /** The ready deploy that resolved it: the next green deploy, not proof of the fix. */
+  resolved_by_deployment_id: string | null;
+  fix_kind: FixKind | null;
+}
+
+export type FixKind = "redeploy" | "rollback" | "code_change";
+
+/** An earlier incident whose error looks like this one's. */
+export interface SimilarIncident {
+  incident: Incident;
+  match: "signature" | "family" | "text";
+  score: number;
+  resolved_by: Deployment | null;
 }
 
 // ───────────────────────────── timeline
