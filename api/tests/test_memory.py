@@ -14,9 +14,11 @@ from app.core.time import utcnow
 from app.demo.scenarios import SCENARIOS_BY_ID, STRIPE_ENV
 from app.incidents import fingerprint, memory, rules
 from app.integrations.base import LogLineIn
-from app.models import Incident
+from app.investigator.orchestrator import run_investigation
+from app.models import Incident, Investigation
 from app.services.logs import to_rows
 from tests.conftest import make_deployment, make_service
+from tests.test_investigator import FakeLLM, report, turn
 
 
 def scenario_lines(scenario) -> list[tuple[str, str]]:  # noqa: ANN001
@@ -195,3 +197,73 @@ async def test_the_migration_finds_what_resolved_older_incidents(database):
         incident = await session.get(Incident, incident.id)
         assert incident.resolved_by_deployment_id == fix.id
         assert incident.signature is None  # fingerprints need logs: the job does those
+
+
+# ───────────────────────────── the investigator's memory step
+
+
+async def test_the_investigator_starts_from_what_resolved_the_same_kind_of_failure(database):
+    async with session_scope() as session:
+        api = await make_service(session, name="storefront-api", external_id="prj_api")
+        stripe = await open_failure(session, api, scenario_lines(STRIPE_ENV), minutes_ago=600)
+        past_report = Investigation(
+            incident_id=stripe.id,
+            deployment_id=stripe.deployment_id,
+            model="fake-model",
+            status="completed",
+            report={"summary": "STRIPE_WEBHOOK_SECRET is not set", "suggested_fix": "Set it."},
+            feedback_rating="up",
+        )
+        session.add(past_report)
+        fix = await make_deployment(session, api, status="ready", minutes_ago=500)
+        await rules.on_deployment(session, fix)  # same commit as the failure: a redeploy
+        await session.commit()
+        cache = await open_failure(
+            session, api, scenario_lines(SCENARIOS_BY_ID["bad-env-var"]), minutes_ago=10
+        )
+        investigation = Investigation(
+            incident_id=cache.id, deployment_id=cache.deployment_id, model="fake-model"
+        )
+        session.add(investigation)
+        await session.commit()
+    await memory.remember_pending()
+
+    llm = FakeLLM(turn(report(evidence=[])))
+    await run_investigation(investigation.id, llm)
+
+    [task] = [
+        m["content"]
+        for m in llm.requests[0]["messages"]
+        if m["role"] == "user" and m["content"].startswith("Opscend memory:")
+    ]
+    assert stripe.id in task and past_report.id in task and fix.id in task
+    assert "the same kind of error" in task and "redeploy" in task
+    assert "<untrusted_data" in task  # past text is data, like logs
+    async with session_scope() as session:
+        done = await session.get(Investigation, investigation.id)
+        first = sorted(done.steps, key=lambda step: step.index)[0]
+        assert (first.type, first.name, first.status) == ("tool", "find_similar_incidents", "ok")
+        # Memory is not evidence: a report with nothing else stays inconclusive.
+        assert done.report["inconclusive"] is True
+
+
+# ───────────────────────────── API
+
+
+async def test_the_api_shows_how_often_an_error_was_seen_and_what_resolved_it(client):
+    async with session_scope() as session:
+        api = await make_service(session, name="storefront-api", external_id="prj_api")
+        first = await open_failure(session, api, scenario_lines(STRIPE_ENV), minutes_ago=600)
+        fix = await make_deployment(session, api, status="ready", minutes_ago=500)
+        await rules.on_deployment(session, fix)
+        await session.commit()
+        again = await open_failure(session, api, scenario_lines(STRIPE_ENV), minutes_ago=10)
+    await memory.remember_pending()
+
+    incident = (await client.get(f"/api/incidents/{again.id}")).json()
+    assert incident["times_seen"] == 2
+    [similar] = (await client.get(f"/api/incidents/{again.id}/similar")).json()
+    assert (similar["incident"]["id"], similar["match"]) == (first.id, "signature")
+    assert similar["incident"]["fix_kind"] == "redeploy"
+    assert similar["resolved_by"]["id"] == fix.id
+    assert (await client.get("/api/incidents/nope/similar")).status_code == 404

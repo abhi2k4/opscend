@@ -68,6 +68,11 @@ export default function IncidentsPage() {
                 <div className="flex items-center gap-2 text-[13.5px]">
                   <span className="truncate font-medium">{i.title}</span>
                   <Tag color={open ? "var(--err)" : "var(--muted)"}>{i.status}</Tag>
+                  {i.times_seen > 1 && (
+                    <span title="Incidents with the same error in the last 180 days">
+                      <Tag color="var(--warn)">seen {i.times_seen}×</Tag>
+                    </span>
+                  )}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-muted">
                   <ProviderIcon provider={i.provider} size={11} className="shrink-0" /> {i.service_name}

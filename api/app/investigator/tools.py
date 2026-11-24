@@ -1,5 +1,6 @@
-"""The investigator's tools. All five are read-only: this class has no method that
-writes to the database or to a provider, and provider tokens never reach its output.
+"""The investigator's tools. All six are read-only: no method changes provider state or
+anything a person entered (fetched logs are cached), and provider tokens never reach
+its output.
 
 Every id a tool shows the model is recorded in the `EvidenceLedger`; the final
 report may only cite ids found there.
@@ -14,8 +15,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import duration_ms, utcnow
+from app.incidents import memory
 from app.integrations.base import ProviderError
-from app.models import Deployment, HealthCheck, LogLine, Service
+from app.models import Deployment, HealthCheck, Incident, Investigation, LogLine, Service
 from app.services import diffs, logs
 from app.services.presenters import find_commit
 
@@ -35,6 +37,8 @@ class EvidenceLedger:
     commits: set[str] = field(default_factory=set)  # full shas
     deploys: dict[str, str] = field(default_factory=dict)  # deployment id or external id → id
     services: set[str] = field(default_factory=set)  # service ids with health history shown
+    incidents: set[str] = field(default_factory=set)  # incident ids shown
+    investigations: set[str] = field(default_factory=set)  # investigation ids shown
 
     def add_deployment(self, deployment: Deployment) -> None:
         self.deploys[deployment.id] = deployment.id
@@ -120,6 +124,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "Recent uptime checks of a service.",
         {"service_id": {"type": "string", "description": "Opscend service id"}},
         ["service_id"],
+    ),
+    _function(
+        "find_similar_incidents",
+        "Earlier incidents with the same or a similar error, what their reports concluded "
+        "and which deploy resolved them. A hint from the past, not evidence about this one.",
+        {"incident_id": {"type": "string", "description": "Opscend incident id"}},
+        ["incident_id"],
     ),
 ]
 
@@ -280,6 +291,77 @@ class InvestigatorTools:
             f"service {service.name} (service_id {service.id}), url {service.health_url}: "
             f"{failed} of {len(checks)} recent checks failed. Newest first:\n" + "\n".join(rows)
         )
+
+    async def find_similar_incidents(self, incident_id: str) -> str:
+        incident = await self._session.get(Incident, incident_id)
+        if incident is None:
+            return f"error: no incident with id {incident_id}"
+        if not incident.signature:
+            return f"Incident {incident.id} has no error fingerprint, so nothing to compare."
+        matches = await memory.similar(self._session, incident)
+        if not matches:
+            return f"No earlier incident has an error like the one of incident {incident.id}."
+        self.ledger.incidents.add(incident.id)
+        # The newest finished report of each match, in one query.
+        reports = {
+            item.incident_id: item
+            for item in await self._session.scalars(
+                select(Investigation)
+                .where(
+                    Investigation.incident_id.in_([m.incident.id for m in matches]),
+                    Investigation.status == "completed",
+                )
+                .order_by(Investigation.created_at)
+            )
+        }
+        rows = []
+        for match in matches:
+            past, report = match.incident, reports.get(match.incident.id)
+            self.ledger.incidents.add(past.id)
+            headline = (past.error_text or "").split("\n", 1)[0]
+            rows.append(
+                f"- incident_id {past.id}, {past.opened_at:%Y-%m-%d}, service "
+                f"{past.service.name}, {past.status}, {_MATCH[match.kind]}: {headline}"
+            )
+            if report is not None and report.report:
+                self.ledger.investigations.add(report.id)
+                rows.append(_describe_report(report))
+            fix = past.resolved_by_deployment_id
+            if fix and (deployment := await self._session.get(Deployment, fix)):
+                self.ledger.add_deployment(deployment)
+                kind = _FIX_KIND.get(past.fix_kind or "", "a later deploy")
+                rows.append(
+                    f"  resolved by deployment_id {deployment.id} at commit "
+                    f"{deployment.commit_sha or 'unknown'}: {kind}"
+                )
+        return (
+            f"{len(matches)} earlier incident(s) look like incident {incident.id}. They are "
+            "hints from the past, not evidence about this failure: confirm with this "
+            "deploy's own logs before relying on one.\n"
+            + untrusted("past incidents", "\n".join(rows))
+        )
+
+
+_MATCH = {
+    "signature": "the same error",
+    "family": "the same kind of error with a different value",
+    "text": "a similar error",
+}
+_FIX_KIND = {
+    "redeploy": "a redeploy of the same commit (so config, infra or a flake, not code)",
+    "rollback": "a rollback to an earlier good commit",
+    "code_change": "a deploy with new code",
+}
+
+
+def _describe_report(report: Investigation) -> str:
+    if report.feedback_rating == "down":
+        # Keep the incident, drop the conclusion a reader marked wrong.
+        return f"  report investigation_id {report.id} was marked wrong by a reader"
+    rated = " (marked helpful)" if report.feedback_rating == "up" else ""
+    line = f"  report investigation_id {report.id}{rated}: {report.report['summary']}"
+    fix = report.report.get("suggested_fix")
+    return f"{line} Suggested fix: {fix}" if fix else line
 
 
 def _select_lines(lines: list[LogLine]) -> list[LogLine]:

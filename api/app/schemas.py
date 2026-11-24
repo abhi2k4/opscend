@@ -26,6 +26,7 @@ LogLevel = Literal["debug", "info", "warn", "error"]
 LogKind = Literal["build", "runtime"]
 HealthState = Literal["up", "down", "unknown"]
 Confidence = Literal["low", "medium", "high"]
+FixKind = Literal["redeploy", "rollback", "code_change"]
 
 
 class Schema(BaseModel):
@@ -240,6 +241,20 @@ class Incident(Schema):
     investigation_id: str | None
     opened_at: datetime
     resolved_at: datetime | None
+    # Incidents with the same error in the last 180 days, this one included.
+    times_seen: int
+    # The ready deploy that resolved it: the next green deploy, not proof of the fix.
+    resolved_by_deployment_id: str | None
+    fix_kind: FixKind | None
+
+
+class SimilarIncident(Schema):
+    """An earlier incident whose error looks like this one's (incidents/memory.py)."""
+
+    incident: Incident
+    match: Literal["signature", "family", "text"]
+    score: float
+    resolved_by: "Deployment | None"
 
 
 # ───────────────────────────── timeline

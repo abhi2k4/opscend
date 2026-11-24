@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.crypto import encrypt, token_hint
 from app.core.db import session_scope
 from app.core.time import utcnow
+from app.incidents import memory
 from app.integrations.base import LogLineIn
 from app.integrations.registry import get_adapter_class
 from app.models import (
@@ -350,6 +351,8 @@ async def seed_demo(session: AsyncSession) -> None:
             deployment_id=broken_web.id,
             opened_at=broken_web.finished_at,
             resolved_at=fixed_web.finished_at,
+            resolved_by_deployment_id=fixed_web.id,
+            fix_kind="code_change",
         )
     )
     failed_api = deployments[(38, "api")]
@@ -377,6 +380,10 @@ async def seed_demo(session: AsyncSession) -> None:
     await session.flush()
     await _seed_investigation(session, incident, failed_api, deployments[(38, "web")])
     await session.commit()
+    # Fingerprint the seeded incidents now (their logs are stored), so a failure broken
+    # in the Chaos lab is matched against them right away.
+    for seeded in (await session.scalars(select(Incident))).all():
+        await memory.remember(session, seeded)
 
 
 def _logs_for(

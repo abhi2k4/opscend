@@ -358,8 +358,9 @@ async def ai_client(env):
 
     def fake_llm():
         def play(request):
-            if len(request["messages"]) == 2:
-                target = request["messages"][1]["content"].split("deployment_id: ")[1].split(" ")[0]
+            if not any(message["role"] == "tool" for message in request["messages"]):
+                task = request["messages"][1]["content"]
+                target = task.split("deployment_id: ")[1].split(" ")[0]
                 return turn(("get_logs", {"deployment_id": target, "kind": "runtime"}))
             return turn(report(culprit_commit_sha=None))
 
@@ -393,7 +394,8 @@ async def test_investigate_creates_a_queued_run_that_the_job_completes(ai_client
         (await client.get(f"/api/investigations/{started.id}")).json()
     )
     assert done.status == "completed" and done.report is not None
-    assert [s.type for s in done.steps] == ["llm", "tool", "llm", "report"]
+    # The memory step (a tool step before the model starts), then the model's own turns.
+    assert [s.type for s in done.steps] == ["tool", "llm", "tool", "llm", "report"]
     assert done.duration_ms is not None
 
     detail = (await client.get(f"/api/deployments/{failed['id']}")).json()

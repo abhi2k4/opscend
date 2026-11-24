@@ -1,10 +1,11 @@
 """Build API schemas from ORM rows (the read side shared by routes and the investigator)."""
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models, schemas
-from app.core.time import duration_ms
+from app.core.time import duration_ms, utcnow
+from app.incidents.memory import LOOKBACK
 
 HEALTH_HISTORY = 24
 
@@ -106,7 +107,22 @@ async def incident_out(session: AsyncSession, incident: models.Incident) -> sche
         ),
         opened_at=incident.opened_at,
         resolved_at=incident.resolved_at,
+        times_seen=await _times_seen(session, incident),
+        resolved_by_deployment_id=incident.resolved_by_deployment_id,
+        fix_kind=incident.fix_kind,
     )
+
+
+async def _times_seen(session: AsyncSession, incident: models.Incident) -> int:
+    if not incident.signature:
+        return 1
+    count = await session.scalar(
+        select(func.count()).where(
+            models.Incident.signature == incident.signature,
+            models.Incident.opened_at >= utcnow() - LOOKBACK,
+        )
+    )
+    return max(1, count or 0)
 
 
 def investigation_out(investigation: models.Investigation) -> schemas.Investigation:
