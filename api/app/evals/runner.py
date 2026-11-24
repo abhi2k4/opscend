@@ -28,10 +28,12 @@ from sqlalchemy import select
 
 from app.core import db
 from app.core.config import get_settings
+from app.core.queue import InlineQueue, get_queue, init_queue
 from app.demo.breaker import break_demo
 from app.demo.seed import rebuild_demo
 from app.investigator.llm import LLMClient, build_llm
 from app.investigator.orchestrator import run_investigation
+from app.jobs import JOBS
 from app.models import Deployment, Incident, Investigation
 
 from .cases import CASES, CASES_BY_ID, Case
@@ -69,10 +71,14 @@ async def isolated_database() -> AsyncIterator[None]:
         os.environ.update(overrides, DATABASE_URL=f"sqlite+aiosqlite:///{folder}/eval.db")
         get_settings.cache_clear()
         db.reset_caches()
+        # Ingest enqueues jobs (remember_incidents), so start the same inline queue the
+        # API uses. No periodic jobs: OPSCEND_BACKGROUND_JOBS is off above.
+        queue = init_queue(JOBS, {})
         try:
             await db.run_migrations()
             yield
         finally:
+            await queue.stop()
             await db.dispose_all()
             for key, value in before.items():
                 if value is None:
@@ -115,6 +121,11 @@ async def _stage(case: Case) -> tuple[str, str | None, str | None]:
 
 async def run_case(case: Case, llm: LLMClient, run: int = 1) -> Result:
     deployment_id, incident_id, sha = await _stage(case)
+    # Let the jobs ingest started finish first, as they usually have by the time a
+    # real investigation runs, so every case starts from the same state.
+    queue = get_queue()
+    if isinstance(queue, InlineQueue):
+        await queue.drain()
     async with db.session_scope() as session:
         investigation = Investigation(
             deployment_id=deployment_id,

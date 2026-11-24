@@ -14,6 +14,7 @@ from app.core.db import current_sandbox, use_sandbox
 from app.demo import sandbox as demo_sandbox
 from app.demo.seed import refresh_public_demo
 from app.incidents.health import run_health_checks
+from app.incidents.memory import remember_pending
 from app.ingest import normalizer, poller
 from app.investigator.orchestrator import run_investigation
 from app.notifications.email import deliver_pending
@@ -56,6 +57,10 @@ async def health_checks(ctx: dict[str, Any]) -> None:
     await run_health_checks()
 
 
+async def remember_incidents(ctx: dict[str, Any]) -> None:
+    await remember_pending()
+
+
 async def refresh_demo(ctx: dict[str, Any]) -> None:
     await refresh_public_demo()
 
@@ -65,7 +70,7 @@ async def deliver_notifications(ctx: dict[str, Any]) -> None:
 
 
 # In the public demo these look after every visitor's sandbox, not only the shared data.
-PER_SANDBOX = {"reconcile", "health_checks", "expire_chat_replies"}
+PER_SANDBOX = {"reconcile", "health_checks", "expire_chat_replies", "remember_incidents"}
 
 
 def _sandboxed(job: Any) -> Any:
@@ -104,6 +109,7 @@ sync_integration = _sandboxed(sync_integration)
 reconcile = _sandboxed(reconcile)
 health_checks = _sandboxed(health_checks)
 expire_chat_replies = _sandboxed(expire_chat_replies)
+remember_incidents = _sandboxed(remember_incidents)
 
 JOBS = {
     job.__name__: job
@@ -116,6 +122,7 @@ JOBS = {
         health_checks,
         deliver_notifications,
         expire_chat_replies,
+        remember_incidents,
         prune,
         refresh_demo,
     )
@@ -132,5 +139,7 @@ def periodic_jobs() -> dict[str, int]:
         "health_checks": max(30, settings.health_interval_seconds),
         "deliver_notifications": 15,
         "expire_chat_replies": 60,
+        # Normally enqueued when an incident opens; this catches logs that came late.
+        "remember_incidents": 600,
         "prune": 3600,
     }

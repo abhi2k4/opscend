@@ -1,6 +1,6 @@
 UV ?= uv
 
-.PHONY: help install dev-api dev-web worker migrate test lint format check check-web check-ai eval
+.PHONY: help install dev-api dev-web worker migrate test lint format check check-web check-ai eval eval-memory
 
 help:
 	@echo "make install   install api (uv) and web (pnpm) dependencies"
@@ -13,6 +13,7 @@ help:
 	@echo "make check     lint + test (run before calling a task done)"
 	@echo "make check-ai  ask the configured model to call a tool (use after changing OPSCEND_AI_*)"
 	@echo "make eval      score the investigator on failures with known causes (uses the configured model)"
+	@echo "make eval-memory  score how incident memory matches repeats and novel errors (no model)"
 
 install:
 	cd api && $(UV) sync
@@ -49,3 +50,6 @@ check-ai:
 
 eval:
 	cd api && $(UV) run python -m app.evals.runner $(ARGS)
+
+eval-memory:
+	cd api && $(UV) run python -m app.evals.memory $(ARGS)
