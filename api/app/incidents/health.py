@@ -1,23 +1,23 @@
 """The uptime checker: one HTTP GET per service with a health URL."""
 
+import asyncio
 import logging
 import random
 import time
-from datetime import timedelta
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import session_scope
-from app.core.time import utcnow
 from app.incidents import rules
 from app.models import HealthCheck, Integration, Service
 
 log = logging.getLogger(__name__)
 
 CHECK_TIMEOUT = httpx.Timeout(10.0)
-RETENTION = timedelta(days=7)
+# Probes run in parallel, so a few slow services cannot push a run past the next tick.
+MAX_CONCURRENT_PROBES = 10
 
 
 async def probe(client: httpx.AsyncClient, url: str) -> tuple[int | None, int | None, bool]:
@@ -68,13 +68,22 @@ async def run_health_checks(client: httpx.AsyncClient | None = None) -> int:
                     )
                 )
             ).all()
-            for service, is_demo in rows:
-                result = _synthetic() if is_demo else await probe(client, service.health_url)
-                await record_check(session, service, result)
-            await session.execute(
-                delete(HealthCheck).where(HealthCheck.checked_at < utcnow() - RETENTION)
+            limit = asyncio.Semaphore(MAX_CONCURRENT_PROBES)
+
+            async def check(url: str, is_demo: bool) -> tuple[int | None, int | None, bool]:
+                if is_demo:
+                    return _synthetic()
+                async with limit:
+                    return await probe(client, url)
+
+            # The probes never touch the database. The results are recorded one by one
+            # afterwards, because an AsyncSession must not be shared between tasks.
+            # Old checks are pruned by services/retention.py (OPSCEND_RETENTION_DAYS).
+            results = await asyncio.gather(
+                *(check(service.health_url, is_demo) for service, is_demo in rows)
             )
-            await session.commit()
+            for (service, _), result in zip(rows, results, strict=True):
+                await record_check(session, service, result)
             return len(rows)
     finally:
         if owns_client:

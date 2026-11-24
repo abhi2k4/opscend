@@ -1,5 +1,6 @@
 """Incident open/resolve rules, exercised through the normalizer and the health checker."""
 
+import asyncio
 from datetime import timedelta
 
 import httpx
@@ -8,7 +9,7 @@ from sqlalchemy import select
 
 from app.core.db import session_scope
 from app.core.time import utcnow
-from app.incidents import rules
+from app.incidents import health, rules
 from app.incidents.health import run_health_checks
 from app.ingest.normalizer import apply_batch
 from app.integrations.base import DeploymentIn, NormalizedBatch
@@ -175,6 +176,32 @@ async def test_health_failure_does_not_displace_an_open_deploy_incident(database
     async with session_scope() as session:
         [incident] = await incidents(session)
         assert incident.trigger == "deploy_failed"
+
+
+@respx.mock
+async def test_health_probes_run_in_parallel_up_to_the_limit(database, monkeypatch):
+    """One slow service must not hold up the others, and the limit caps open requests."""
+    monkeypatch.setattr(health, "MAX_CONCURRENT_PROBES", 2)
+    in_flight = peak = 0
+
+    async def slow(request):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return httpx.Response(200)
+
+    async with session_scope() as session:
+        for n in range(5):
+            url = f"https://svc{n}.example.test/health"
+            respx.get(url).mock(side_effect=slow)
+            await make_service(session, name=f"svc{n}", external_id=f"prj_{n}", health_url=url)
+    async with httpx.AsyncClient() as http:
+        assert await run_health_checks(http) == 5
+    assert peak == 2
+    async with session_scope() as session:
+        assert len((await session.scalars(select(HealthCheck))).all()) == 5
 
 
 async def test_an_old_failure_is_history_not_an_incident(database, monkeypatch):
