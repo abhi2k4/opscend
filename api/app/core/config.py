@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     ai_max_output_tokens: int = Field(0, alias="OPSCEND_AI_MAX_OUTPUT_TOKENS")
     ai_max_tool_calls: int = Field(8, alias="OPSCEND_AI_MAX_TOOL_CALLS")
     ai_token_budget: int = Field(40_000, alias="OPSCEND_AI_TOKEN_BUDGET")
+    # Investigations and chat replies running at once. They have their own job slots, so
+    # slow model runs never hold up deploy events; a self-hosted server may want 1.
+    ai_concurrency: int = Field(3, ge=1, alias="OPSCEND_AI_CONCURRENCY")
     # Investigate a failed deploy as soon as its incident opens, up to a daily cap.
     auto_investigate: bool = Field(True, alias="OPSCEND_AUTO_INVESTIGATE")
     auto_investigate_daily_limit: int = Field(20, alias="OPSCEND_AUTO_INVESTIGATE_DAILY_LIMIT")

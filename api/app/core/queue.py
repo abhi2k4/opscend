@@ -17,6 +17,14 @@ log = logging.getLogger(__name__)
 
 Job = Callable[..., Awaitable[Any]]
 
+#: Jobs that call the model. They can run for minutes (30 with a self-hosted model),
+#: so they get their own slots, OPSCEND_AI_CONCURRENCY of them: a burst of failed
+#: deploys cannot fill every worker slot with investigations while the deploy events
+#: that come next wait, and a local model server is not sent more than it can serve.
+AI_JOBS = frozenset({"investigate", "chat_reply"})
+#: The arq queue for AI_JOBS (app/worker.py consumes it next to the default queue).
+AI_QUEUE_NAME = "arq:queue:ai"
+
 
 class JobQueue(Protocol):
     kind: str
@@ -33,9 +41,15 @@ class InlineQueue:
 
     kind = "inline"
 
-    def __init__(self, jobs: dict[str, Job], periodic: dict[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        jobs: dict[str, Job],
+        periodic: dict[str, int] | None = None,
+        ai_concurrency: int = 3,
+    ) -> None:
         self._jobs = jobs
         self._periodic = periodic or {}
+        self._ai_slots = asyncio.Semaphore(ai_concurrency)
         self._tasks: set[asyncio.Task[Any]] = set()
         self._loops: list[asyncio.Task[None]] = []
 
@@ -47,6 +61,13 @@ class InlineQueue:
         task.add_done_callback(self._tasks.discard)
 
     async def _run(self, name: str, *args: Any) -> None:
+        if name in AI_JOBS:
+            async with self._ai_slots:  # extra model jobs wait here, nothing else does
+                await self._call(name, *args)
+        else:
+            await self._call(name, *args)
+
+    async def _call(self, name: str, *args: Any) -> None:
         try:
             await self._jobs[name]({}, *args)
         except Exception:
@@ -94,7 +115,8 @@ class ArqQueue:
         # The worker is another process: tell it which demo sandbox the job belongs to.
         sandbox = current_sandbox()
         extra = {"sandbox": sandbox} if sandbox else {}
-        await self._pool.enqueue_job(name, *args, **extra)
+        queue_name = AI_QUEUE_NAME if name in AI_JOBS else None  # None: the default queue
+        await self._pool.enqueue_job(name, *args, _queue_name=queue_name, **extra)
 
     async def stop(self) -> None:
         if self._pool is not None:
@@ -111,7 +133,9 @@ def init_queue(jobs: dict[str, Job], periodic: dict[str, int]) -> JobQueue:
     if settings.redis_url:
         _queue = ArqQueue(settings.redis_url)
     else:
-        _queue = InlineQueue(jobs, periodic if settings.background_jobs else None)
+        _queue = InlineQueue(
+            jobs, periodic if settings.background_jobs else None, settings.ai_concurrency
+        )
     return _queue
 
 
