@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from sqlalchemy import select, update
 
 from app import __version__
-from app.core.config import get_settings
+from app.core.config import DEFAULT_ADMIN_PASSWORD, get_settings
 from app.core.db import dispose_all, run_migrations, session_scope
 from app.core.logging import configure_logging
 from app.core.public_demo import tag_visitor
@@ -70,6 +70,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if settings.auto_migrate:
         await run_migrations()
     await ensure_admin()
+    exposed = settings.cookie_secure and not settings.public_demo
+    if exposed and settings.admin_password == DEFAULT_ADMIN_PASSWORD:
+        # Secure cookies mean HTTPS, so this install is likely reachable from outside.
+        # (The public demo has no sign-in at all.)
+        log.warning("OPSCEND_ADMIN_PASSWORD is still the default: anyone can sign in")
     if settings.demo:
         async with session_scope() as session:
             if settings.public_demo:
