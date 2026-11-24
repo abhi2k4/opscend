@@ -100,6 +100,18 @@ class Incident(Base):
     )
     opened_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, index=True)
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Memory (incidents/memory.py). The fingerprint of the failure: "" once looked at
+    # and nothing usable was found, NULL while not looked at yet.
+    signature: Mapped[str | None] = mapped_column(String(16), index=True)
+    family: Mapped[str | None] = mapped_column(String(16), index=True)
+    error_text: Mapped[str | None] = mapped_column(Text)
+    # The ready deploy that resolved a deploy incident, and how it differs from the
+    # failed one: "redeploy" (same commit), "rollback" (an earlier good commit) or
+    # "code_change". It is the next green deploy, so a correlation, not a proof.
+    resolved_by_deployment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("deployment.id", ondelete="SET NULL")
+    )
+    fix_kind: Mapped[str | None] = mapped_column(String(16))
 
     service: Mapped[Service] = relationship(lazy="joined")
 
