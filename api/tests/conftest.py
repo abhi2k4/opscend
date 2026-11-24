@@ -1,6 +1,7 @@
 """Shared fixtures: an isolated SQLite database per test and API clients."""
 
 import asyncio
+import ipaddress
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -17,13 +18,14 @@ from app.core import crypto, db
 from app.core import queue as queue_module
 from app.core.config import get_settings
 from app.core.time import utcnow
-from app.incidents import rules
+from app.incidents import health, rules
 from app.ingest import normalizer, poller
 from app.models import Deployment, Integration, Service
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ADMIN = {"email": "admin@opscend.local", "password": "opscend-dev"}
 SECRET_TOKEN = "vercel-secret-token-do-not-leak-9z8y"
+PUBLIC_TEST_ADDRESS = "93.184.215.14"  # what fake DNS answers for any hostname
 
 
 def load_fixture(name: str) -> Any:
@@ -67,8 +69,17 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
-def no_live_http():
-    """Tests never touch the network: any request a test did not mock raises."""
+def no_live_http(monkeypatch: pytest.MonkeyPatch):
+    """Tests never touch the network: any request a test did not mock raises, and the
+    health checker's DNS lookups answer with a public address (IP literals as is)."""
+
+    async def fake_resolve(host: str) -> list[str]:
+        try:
+            return [str(ipaddress.ip_address(host))]
+        except ValueError:
+            return [PUBLIC_TEST_ADDRESS]
+
+    monkeypatch.setattr(health, "resolve", fake_resolve)
     with respx.mock(assert_all_called=False, assert_all_mocked=True):
         yield
 
