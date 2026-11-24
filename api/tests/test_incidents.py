@@ -229,7 +229,7 @@ async def test_a_service_that_was_never_healthy_is_down_but_not_an_incident(data
         assert (await session.scalars(select(HealthCheck))).all()[-1].ok is False
 
 
-# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ automatic investigation
+# ───────────────────────────── automatic investigation
 
 
 def _with_ai(env, **settings: str) -> None:
