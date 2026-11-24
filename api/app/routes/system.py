@@ -8,9 +8,9 @@ from app.core.config import get_settings
 from app.core.public_demo import forbid_in_public_demo
 from app.core.security import (
     SESSION_COOKIE,
+    check_login,
     create_session_token,
     current_user,
-    verify_password,
 )
 
 from .deps import SessionDep
@@ -50,7 +50,7 @@ async def login(
     user = await session.scalar(
         select(models.User).where(models.User.email == body.email.strip().lower())
     )
-    if user is None or not verify_password(body.password, user.password_hash):
+    if not await check_login(user, body.password):
         raise HTTPException(401, "Invalid email or password")
     settings = get_settings()
     response.set_cookie(

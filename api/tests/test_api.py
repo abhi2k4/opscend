@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from app import schemas
-from app.core import crypto
+from app.core import crypto, security
 from app.core.config import get_settings
 from app.core.db import session_scope
 from app.incidents.health import run_health_checks
@@ -59,6 +59,17 @@ async def test_every_other_route_requires_a_session(anon_client):
         response = await anon_client.request(method, url, json={})
         assert response.status_code == 401, f"{method} {path} → {response.status_code}"
         assert response.json() == {"detail": "Not authenticated"}
+
+
+async def test_unknown_email_is_checked_against_a_dummy_hash(anon_client, monkeypatch):
+    """A wrong email costs a bcrypt check like a wrong password, so timing reveals nothing."""
+    checked = []
+    real = security.verify_password
+    monkeypatch.setattr(security, "verify_password", lambda pw, h: checked.append(h) or real(pw, h))
+    for email in ("nobody@example.test", ADMIN["email"]):
+        body = {"email": email, "password": "wrong"}
+        assert (await anon_client.post("/api/auth/login", json=body)).status_code == 401
+    assert len(checked) == 2 and all(h.startswith("$2") for h in checked)
 
 
 async def test_login_sets_an_httponly_cookie_and_logout_clears_it(anon_client):

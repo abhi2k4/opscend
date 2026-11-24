@@ -1,6 +1,8 @@
 """Password hashing, session JWTs and the `current_user` dependency."""
 
+import asyncio
 from datetime import timedelta
+from functools import lru_cache
 
 import bcrypt
 import jwt
@@ -27,6 +29,23 @@ def verify_password(password: str, password_hash: str) -> bool:
         return bcrypt.checkpw(password.encode(), password_hash.encode())
     except ValueError:
         return False
+
+
+@lru_cache
+def _dummy_hash() -> str:
+    return hash_password("no account has this password")
+
+
+async def check_login(user: User | None, password: str) -> bool:
+    """Check a sign-in attempt without blocking the server or revealing who has an account.
+
+    bcrypt is slow on purpose (about 0.2 s), so it runs in a thread: on the event loop a
+    burst of attempts would stall every other request. An unknown email is checked
+    against a dummy hash, so it takes as long as a wrong password.
+    """
+    password_hash = user.password_hash if user is not None else _dummy_hash()
+    valid = await asyncio.to_thread(verify_password, password, password_hash)
+    return valid and user is not None
 
 
 def create_session_token(user_id: str) -> str:

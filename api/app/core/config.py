@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_DIR = Path(__file__).resolve().parents[2]
 ROOT_DIR = API_DIR.parent
+# The documented local password. A deployment reachable from outside must change it.
+DEFAULT_ADMIN_PASSWORD = "opscend-dev"
 
 
 # OPSCEND_AI_PROVIDER → (default base URL, default model). Any other name is an
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
 
     secret_key: str | None = Field(None, alias="OPSCEND_SECRET_KEY")
     admin_email: str = Field("admin@opscend.local", alias="OPSCEND_ADMIN_EMAIL")
-    admin_password: str = Field("opscend-dev", alias="OPSCEND_ADMIN_PASSWORD")
+    admin_password: str = Field(DEFAULT_ADMIN_PASSWORD, alias="OPSCEND_ADMIN_PASSWORD")
     session_hours: int = Field(24 * 7, alias="OPSCEND_SESSION_HOURS")
     cookie_secure: bool = Field(False, alias="OPSCEND_COOKIE_SECURE")
 
