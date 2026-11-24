@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import duration_ms, utcnow
 from app.integrations.base import ProviderError
+from app.investigator.redact import redact
 from app.models import Deployment, HealthCheck, LogLine, Service
 from app.services import diffs, logs
 from app.services.presenters import find_commit
@@ -50,8 +51,11 @@ class EvidenceLedger:
 
 
 def untrusted(label: str, text: str) -> str:
-    """Wrap provider-supplied text so the model treats it as data, never as instructions."""
-    safe = text.replace(UNTRUSTED_CLOSE, "<\\/untrusted_data>")
+    """Wrap provider-supplied text so the model treats it as data, never as instructions.
+
+    Secrets are removed first: this text goes to an outside model (see redact.py).
+    """
+    safe = redact(text).replace(UNTRUSTED_CLOSE, "<\\/untrusted_data>")
     return f'<untrusted_data source="{label}">\n{safe}\n{UNTRUSTED_CLOSE}'
 
 

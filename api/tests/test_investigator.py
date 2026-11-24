@@ -16,7 +16,7 @@ from app.investigator.llm import LLMError, LLMResponse, ToolCall
 from app.investigator.orchestrator import run_investigation
 from app.investigator.report import REPORT_TOOL_NAME
 from app.investigator.tools import TOOL_SPECS, InvestigatorTools
-from app.models import CommitDiff, HealthCheck, Investigation
+from app.models import CommitDiff, Deployment, HealthCheck, Investigation, LogLine
 from app.services.logs import to_rows
 from tests.conftest import SECRET_TOKEN, make_deployment, make_service
 
@@ -240,6 +240,31 @@ async def test_untrusted_data_is_wrapped_and_tokens_never_reach_the_model(databa
     assert "untrusted_data" in system and "never" in system
     everything = json.dumps([request["messages"] for request in llm.requests])
     assert SECRET_TOKEN not in everything
+
+
+async def test_secrets_in_logs_never_reach_the_model(database):
+    ids = await scene()
+    leaked = "DATABASE_URL=postgres://app:LeakedPw12345@db.internal/app"
+    async with session_scope() as session:
+        deployment = await session.get(Deployment, ids["deployment"])
+        line = LogLineIn(
+            ts=deployment.started_at + timedelta(seconds=3), level="info", message=leaked
+        )
+        session.add_all(to_rows(deployment.id, "runtime", [line]))
+        await session.commit()
+    llm = FakeLLM(
+        turn(("get_logs", {"deployment_id": ids["deployment"], "kind": "runtime"})),
+        turn(report()),
+    )
+    await run_investigation(ids["investigation"], llm)
+
+    everything = json.dumps([request["messages"] for request in llm.requests])
+    assert "LeakedPw12345" not in everything
+    assert "postgres://app:[redacted]@db.internal/app" in everything
+    assert "STRIPE_WEBHOOK_SECRET" in everything  # the evidence itself is untouched
+    async with session_scope() as session:  # only the model's copy changes
+        stored = await session.scalars(select(LogLine.message))
+        assert leaked in stored.all()
 
 
 async def test_tools_are_read_only_and_exactly_the_five(database):
